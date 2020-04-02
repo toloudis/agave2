@@ -573,10 +573,10 @@ public:
       shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
       shaderStages[1].pName = "main";
 
-      shaderStages[0].module = renderlib::loadShaderFromPtr(
-        (uint32_t*)shaders_triangle_vert, sizeof(shaders_triangle_vert) / sizeof(uint32_t), device);
-      shaderStages[1].module = renderlib::loadShaderFromPtr(
-        (uint32_t*)shaders_triangle_frag, sizeof(shaders_triangle_frag) / sizeof(uint32_t), device);
+      shaderStages[0].module =
+        renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_vert, sizeof(shaders_triangle_vert), device);
+      shaderStages[1].module =
+        renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_frag, sizeof(shaders_triangle_frag), device);
 
       shaderModules = { shaderStages[0].module, shaderStages[1].module };
       VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &pipeline));

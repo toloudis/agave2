@@ -20,3 +20,6 @@ cmake --build . --config Debug --target install
 
 https://vulkan.lunarg.com/doc/sdk/latest/mac/getting_started.html
 Use the install.py script to ensure the sdk is in /usr/local to make pathing easier
+
+export VK_LAYER_PATH=/usr/local/share/vulkan/explicit_layer.d
+export VK_ICD_FILENAMES=/usr/local/share/vulkan/icd.d/MoltenVK_icd.json
