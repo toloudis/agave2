@@ -1,0 +1,13 @@
+thirdparty/
+build/
+renderlib/version.h
+GeneratedFiles/
+x64/
+.vs/
+*.vcxproj.filters
+*.vcxproj.user
+*.pch
+*.pdb
+\.vscode/
+\.idea/
+dask-worker-space/
