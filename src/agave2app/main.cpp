@@ -16,7 +16,7 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
+#if 0
 #include "VulkanTools.h"
 #include <vulkan/vulkan.h>
 
@@ -904,10 +904,11 @@ public:
   }
 };
 
+#endif 
 int main() {
-  VulkanExample *vulkanExample = new VulkanExample();
+//  VulkanExample *vulkanExample = new VulkanExample();
   std::cout << "Finished. Press enter to terminate...";
   getchar();
-  delete (vulkanExample);
+//  delete (vulkanExample);
   return 0;
 }
