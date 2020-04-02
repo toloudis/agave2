@@ -6,7 +6,7 @@ project(external LANGUAGES C CXX)
 
 message(STATUS "Adding libktx")
 
-set(KTX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ktx)
+set(KTX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/KTX-Software)
 set(KTX_SOURCES
     ${KTX_DIR}/lib/texture.c
     ${KTX_DIR}/lib/hashlist.c
