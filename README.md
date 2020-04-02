@@ -1,4 +1,5 @@
-For windows:
+## Windows:
+
 Make sure you are in an environment where vsvarsall has been run, e.g. a "VS2019 x64 Native Tools Command Prompt"
 
 ```
@@ -14,3 +15,8 @@ TODO
 cmake --build . --config Debug --target install
 
 ```
+
+## MacOS
+
+https://vulkan.lunarg.com/doc/sdk/latest/mac/getting_started.html
+Use the install.py script to ensure the sdk is in /usr/local to make pathing easier

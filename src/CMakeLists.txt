@@ -6,5 +6,9 @@ include_directories(
     external/tinygltf
 )
 
-add_subdirectory(agave2app)
 add_subdirectory(external)
+add_subdirectory(Vulkan/base)
+add_subdirectory(render)
+
+# app comes last after deps build?
+add_subdirectory(agave2app)
