@@ -8,6 +8,8 @@ spirv_shaders(SHADER_HEADERS
 add_library(render STATIC 
   "${CMAKE_CURRENT_SOURCE_DIR}/renderer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/renderer.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/renderlib.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/renderlib.h"
   ${SHADER_HEADERS}
 )
 
