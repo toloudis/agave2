@@ -16,6 +16,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "VulkanDevice.hpp"
+#include "VulkanFrameBuffer.hpp"
 #include "VulkanTools.h"
 #include <vulkan/vulkan.h>
 
@@ -36,6 +38,7 @@ public:
   VkInstance instance;
   VkPhysicalDevice physicalDevice;
   VkDevice device;
+  vks::VulkanDevice* vulkanDevice = nullptr;
   uint32_t queueFamilyIndex;
   VkPipelineCache pipelineCache;
   VkQueue queue;
@@ -58,6 +61,8 @@ public:
   VkFramebuffer framebuffer;
   FrameBufferAttachment colorAttachment, depthAttachment;
   VkRenderPass renderPass;
+
+  vks::Framebuffer* vulkanFramebuffer = nullptr;
 
   uint32_t getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties)
   {
@@ -133,40 +138,19 @@ public:
     /*
             Vulkan device creation
     */
-    uint32_t deviceCount = 0;
-    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr));
-    std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
-    VK_CHECK_RESULT(vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices.data()));
-    physicalDevice = physicalDevices[0];
+    physicalDevice = renderlib::selectPhysicalDevice(1);
 
-    VkPhysicalDeviceProperties deviceProperties;
-    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-    LOG("GPU: %s\n", deviceProperties.deviceName);
-
-    // Request a single graphics queue
-    const float defaultQueuePriority(0.0f);
-    VkDeviceQueueCreateInfo queueCreateInfo = {};
-    uint32_t queueFamilyCount;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
-    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilyProperties.size()); i++) {
-      if (queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-        queueFamilyIndex = i;
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = i;
-        queueCreateInfo.queueCount = 1;
-        queueCreateInfo.pQueuePriorities = &defaultQueuePriority;
-        break;
-      }
+    vulkanDevice = new vks::VulkanDevice(physicalDevice);
+    VkPhysicalDeviceFeatures enabledFeatures{};
+    std::vector<const char*> enabledDeviceExtensions;
+    VkResult res = vulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, nullptr, false);
+    if (res != VK_SUCCESS) {
+      vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(res), res);
+      return;
     }
-    // Create logical device
-    VkDeviceCreateInfo deviceCreateInfo = {};
-    deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    deviceCreateInfo.queueCreateInfoCount = 1;
-    deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
-    VK_CHECK_RESULT(vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device));
+    device = vulkanDevice->logicalDevice;
 
+    queueFamilyIndex = vulkanDevice->queueFamilyIndices.graphics;
     // Get a graphics queue
     vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue);
 
@@ -197,28 +181,25 @@ public:
       VkBuffer stagingBuffer;
       VkDeviceMemory stagingMemory;
 
-      // Command buffer for copy commands (reused)
-      VkCommandBufferAllocateInfo cmdBufAllocateInfo =
-        vks::initializers::commandBufferAllocateInfo(commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
-      VkCommandBuffer copyCmd;
-      VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &copyCmd));
+      VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandPool);
       VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
       // Copy input data to VRAM using a staging buffer
       {
         // Vertices
-        createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     &stagingBuffer,
-                     &stagingMemory,
-                     vertexBufferSize,
-                     vertices.data());
+        VK_CHECK_RESULT(
+          vulkanDevice->createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                     vertexBufferSize,
+                                     &stagingBuffer,
+                                     &stagingMemory,
+                                     vertices.data()));
 
-        createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                     &vertexBuffer,
-                     &vertexMemory,
-                     vertexBufferSize);
+        VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                                   vertexBufferSize,
+                                                   &vertexBuffer,
+                                                   &vertexMemory));
 
         VK_CHECK_RESULT(vkBeginCommandBuffer(copyCmd, &cmdBufInfo));
         VkBufferCopy copyRegion = {};
@@ -232,18 +213,19 @@ public:
         vkFreeMemory(device, stagingMemory, nullptr);
 
         // Indices
-        createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     &stagingBuffer,
-                     &stagingMemory,
-                     indexBufferSize,
-                     indices.data());
+        VK_CHECK_RESULT(
+          vulkanDevice->createBuffer(VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                     indexBufferSize,
+                                     &stagingBuffer,
+                                     &stagingMemory,
+                                     indices.data()));
 
-        createBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                     &indexBuffer,
-                     &indexMemory,
-                     indexBufferSize);
+        VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                                   indexBufferSize,
+                                                   &indexBuffer,
+                                                   &indexMemory));
 
         VK_CHECK_RESULT(vkBeginCommandBuffer(copyCmd, &cmdBufInfo));
         copyRegion.size = indexBufferSize;
@@ -265,6 +247,9 @@ public:
     VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
     VkFormat depthFormat;
     vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
+
+    vulkanFramebuffer = new vks::Framebuffer(vulkanDevice);
+
     {
       // Color attachment
       VkImageCreateInfo image = vks::initializers::imageCreateInfo();
@@ -746,7 +731,7 @@ public:
     for (auto shadermodule : shaderModules) {
       vkDestroyShaderModule(device, shadermodule, nullptr);
     }
-    vkDestroyDevice(device, nullptr);
+    delete vulkanDevice;
 
     renderlib::cleanup();
   }

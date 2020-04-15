@@ -16,6 +16,7 @@ public:
   static void cleanup();
 
   static VkInstance instance();
+  static VkPhysicalDevice selectPhysicalDevice(size_t which = 0);
 
   static VkShaderModule loadShaderFromPtr(uint32_t* shaderCode, size_t size, VkDevice device);
 };

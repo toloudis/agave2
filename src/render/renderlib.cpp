@@ -2,7 +2,10 @@
 
 #include "VulkanTools.h"
 
+#include <vector>
+
 static VkInstance sInstance = nullptr;
+static std::vector<VkPhysicalDevice> sPhysicalDevices;
 
 static VkDebugReportCallbackEXT debugReportCallback{};
 
@@ -22,6 +25,19 @@ debugMessageCallback(VkDebugReportFlagsEXT flags,
 {
   LOG("[VALIDATION]: %s - %s\n", pLayerPrefix, pMessage);
   return VK_FALSE;
+}
+
+void
+logPhysicalDevices()
+{
+  for (auto physicalDevice : sPhysicalDevices) {
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+    std::cout << "Device : " << deviceProperties.deviceName << std::endl;
+    std::cout << " Type: " << vks::tools::physicalDeviceTypeString(deviceProperties.deviceType) << std::endl;
+    std::cout << " API: " << (deviceProperties.apiVersion >> 22) << "." << ((deviceProperties.apiVersion >> 12) & 0x3ff)
+              << "." << (deviceProperties.apiVersion & 0xfff) << std::endl;
+  }
 }
 
 int
@@ -98,7 +114,28 @@ renderlib::initialize(const char* appName, uint32_t requiredExtensionCount, cons
   }
 #endif
 
+  // get all physical devices
+  uint32_t deviceCount = 0;
+  VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, nullptr));
+  std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
+  VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, physicalDevices.data()));
+  sPhysicalDevices = physicalDevices;
+
+  logPhysicalDevices();
+
   return 1;
+}
+
+VkPhysicalDevice
+renderlib::selectPhysicalDevice(size_t which)
+{
+  VkPhysicalDevice physicalDevice = sPhysicalDevices[which];
+
+  VkPhysicalDeviceProperties deviceProperties;
+  vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+  LOG("SELECTED GPU: %s\n", deviceProperties.deviceName);
+
+  return physicalDevice;
 }
 
 void
