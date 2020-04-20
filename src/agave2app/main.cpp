@@ -249,144 +249,27 @@ public:
     vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
 
     vulkanFramebuffer = new vks::Framebuffer(vulkanDevice);
+    // Color attachment
+    vks::AttachmentCreateInfo colorAttachmentCreateInfo;
+    colorAttachmentCreateInfo.width = width;
+    colorAttachmentCreateInfo.height = height;
+    colorAttachmentCreateInfo.layerCount = 1;
+    colorAttachmentCreateInfo.format = colorFormat;
+    colorAttachmentCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    vulkanFramebuffer->addAttachment(colorAttachmentCreateInfo);
 
-    {
-      // Color attachment
-      VkImageCreateInfo image = vks::initializers::imageCreateInfo();
-      image.imageType = VK_IMAGE_TYPE_2D;
-      image.format = colorFormat;
-      image.extent.width = width;
-      image.extent.height = height;
-      image.extent.depth = 1;
-      image.mipLevels = 1;
-      image.arrayLayers = 1;
-      image.samples = VK_SAMPLE_COUNT_1_BIT;
-      image.tiling = VK_IMAGE_TILING_OPTIMAL;
-      image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-
-      VkMemoryAllocateInfo memAlloc = vks::initializers::memoryAllocateInfo();
-      VkMemoryRequirements memReqs;
-
-      VK_CHECK_RESULT(vkCreateImage(device, &image, nullptr, &colorAttachment.image));
-      vkGetImageMemoryRequirements(device, colorAttachment.image, &memReqs);
-      memAlloc.allocationSize = memReqs.size;
-      memAlloc.memoryTypeIndex = getMemoryTypeIndex(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-      VK_CHECK_RESULT(vkAllocateMemory(device, &memAlloc, nullptr, &colorAttachment.memory));
-      VK_CHECK_RESULT(vkBindImageMemory(device, colorAttachment.image, colorAttachment.memory, 0));
-
-      VkImageViewCreateInfo colorImageView = vks::initializers::imageViewCreateInfo();
-      colorImageView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      colorImageView.format = colorFormat;
-      colorImageView.subresourceRange = {};
-      colorImageView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-      colorImageView.subresourceRange.baseMipLevel = 0;
-      colorImageView.subresourceRange.levelCount = 1;
-      colorImageView.subresourceRange.baseArrayLayer = 0;
-      colorImageView.subresourceRange.layerCount = 1;
-      colorImageView.image = colorAttachment.image;
-      VK_CHECK_RESULT(vkCreateImageView(device, &colorImageView, nullptr, &colorAttachment.view));
-
-      // Depth stencil attachment
-      image.format = depthFormat;
-      image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-      VK_CHECK_RESULT(vkCreateImage(device, &image, nullptr, &depthAttachment.image));
-      vkGetImageMemoryRequirements(device, depthAttachment.image, &memReqs);
-      memAlloc.allocationSize = memReqs.size;
-      memAlloc.memoryTypeIndex = getMemoryTypeIndex(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-      VK_CHECK_RESULT(vkAllocateMemory(device, &memAlloc, nullptr, &depthAttachment.memory));
-      VK_CHECK_RESULT(vkBindImageMemory(device, depthAttachment.image, depthAttachment.memory, 0));
-
-      VkImageViewCreateInfo depthStencilView = vks::initializers::imageViewCreateInfo();
-      depthStencilView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-      depthStencilView.format = depthFormat;
-      depthStencilView.flags = 0;
-      depthStencilView.subresourceRange = {};
-      depthStencilView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-      depthStencilView.subresourceRange.baseMipLevel = 0;
-      depthStencilView.subresourceRange.levelCount = 1;
-      depthStencilView.subresourceRange.baseArrayLayer = 0;
-      depthStencilView.subresourceRange.layerCount = 1;
-      depthStencilView.image = depthAttachment.image;
-      VK_CHECK_RESULT(vkCreateImageView(device, &depthStencilView, nullptr, &depthAttachment.view));
-    }
+    vks::AttachmentCreateInfo depthAttachmentCreateInfo;
+    depthAttachmentCreateInfo.width = width;
+    depthAttachmentCreateInfo.height = height;
+    depthAttachmentCreateInfo.layerCount = 1;
+    depthAttachmentCreateInfo.format = depthFormat;
+    depthAttachmentCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    vulkanFramebuffer->addAttachment(depthAttachmentCreateInfo);
 
     /*
             Create renderpass
     */
-    {
-      std::array<VkAttachmentDescription, 2> attchmentDescriptions = {};
-      // Color attachment
-      attchmentDescriptions[0].format = colorFormat;
-      attchmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
-      attchmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-      attchmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-      attchmentDescriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attchmentDescriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attchmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      attchmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-      // Depth attachment
-      attchmentDescriptions[1].format = depthFormat;
-      attchmentDescriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
-      attchmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-      attchmentDescriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attchmentDescriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-      attchmentDescriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-      attchmentDescriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-      attchmentDescriptions[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-      VkAttachmentReference colorReference = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-      VkAttachmentReference depthReference = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-
-      VkSubpassDescription subpassDescription = {};
-      subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-      subpassDescription.colorAttachmentCount = 1;
-      subpassDescription.pColorAttachments = &colorReference;
-      subpassDescription.pDepthStencilAttachment = &depthReference;
-
-      // Use subpass dependencies for layout transitions
-      std::array<VkSubpassDependency, 2> dependencies;
-
-      dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-      dependencies[0].dstSubpass = 0;
-      dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-      dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-      dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-      dependencies[1].srcSubpass = 0;
-      dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-      dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-      dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-      dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-      dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-      dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-      // Create the actual renderpass
-      VkRenderPassCreateInfo renderPassInfo = {};
-      renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-      renderPassInfo.attachmentCount = static_cast<uint32_t>(attchmentDescriptions.size());
-      renderPassInfo.pAttachments = attchmentDescriptions.data();
-      renderPassInfo.subpassCount = 1;
-      renderPassInfo.pSubpasses = &subpassDescription;
-      renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-      renderPassInfo.pDependencies = dependencies.data();
-      VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass));
-
-      VkImageView attachments[2];
-      attachments[0] = colorAttachment.view;
-      attachments[1] = depthAttachment.view;
-
-      VkFramebufferCreateInfo framebufferCreateInfo = vks::initializers::framebufferCreateInfo();
-      framebufferCreateInfo.renderPass = renderPass;
-      framebufferCreateInfo.attachmentCount = 2;
-      framebufferCreateInfo.pAttachments = attachments;
-      framebufferCreateInfo.width = width;
-      framebufferCreateInfo.height = height;
-      framebufferCreateInfo.layers = 1;
-      VK_CHECK_RESULT(vkCreateFramebuffer(device, &framebufferCreateInfo, nullptr, &framebuffer));
-    }
+    VK_CHECK_RESULT(vulkanFramebuffer->createRenderPass());
 
     /*
             Prepare graphics pipeline
@@ -399,7 +282,7 @@ public:
 
       VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(nullptr, 0);
 
-      // MVP via push constant block
+      // MVP(modelviewprojection) via push constant block
       VkPushConstantRange pushConstantRange =
         vks::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4), 0);
       pipelineLayoutCreateInfo.pushConstantRangeCount = 1;

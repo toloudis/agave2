@@ -2,6 +2,12 @@
 
 #include "VulkanTools.h"
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <array>
 #include <vector>
 
 static VkInstance sInstance = nullptr;
@@ -174,4 +180,105 @@ renderlib::loadShaderFromPtr(uint32_t* shaderCode, size_t size, VkDevice device)
   VK_CHECK_RESULT(vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderModule));
 
   return shaderModule;
+}
+
+VkResult
+renderlib::createGraphicsPipeline(VkDevice device, VkPipeline* pipeline, VkPipelineCache* pipelineCache)
+{
+  // TODO from caller, must be cleaned up later.
+  VkDescriptorSetLayout descriptorSetLayout;
+  VkPipelineLayout pipelineLayout;
+
+  std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {};
+  VkDescriptorSetLayoutCreateInfo descriptorLayout =
+    vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+  VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
+
+  VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(nullptr, 0);
+
+  // MVP(modelviewprojection) via push constant block
+  VkPushConstantRange pushConstantRange =
+    vks::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4), 0);
+  pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+  pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
+
+  VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
+
+  VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
+  pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+  VK_CHECK_RESULT(vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, pipelineCache));
+
+  // Create pipeline
+  VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
+    vks::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 0, VK_FALSE);
+
+  VkPipelineRasterizationStateCreateInfo rasterizationState = vks::initializers::pipelineRasterizationStateCreateInfo(
+    VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
+
+  VkPipelineColorBlendAttachmentState blendAttachmentState =
+    vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE);
+
+  VkPipelineColorBlendStateCreateInfo colorBlendState =
+    vks::initializers::pipelineColorBlendStateCreateInfo(1, &blendAttachmentState);
+
+  VkPipelineDepthStencilStateCreateInfo depthStencilState =
+    vks::initializers::pipelineDepthStencilStateCreateInfo(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
+
+  VkPipelineViewportStateCreateInfo viewportState = vks::initializers::pipelineViewportStateCreateInfo(1, 1);
+
+  VkPipelineMultisampleStateCreateInfo multisampleState =
+    vks::initializers::pipelineMultisampleStateCreateInfo(VK_SAMPLE_COUNT_1_BIT);
+
+  std::vector<VkDynamicState> dynamicStateEnables = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+  VkPipelineDynamicStateCreateInfo dynamicState =
+    vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
+
+  VkGraphicsPipelineCreateInfo pipelineCreateInfo = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass);
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages{};
+
+  pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
+  pipelineCreateInfo.pRasterizationState = &rasterizationState;
+  pipelineCreateInfo.pColorBlendState = &colorBlendState;
+  pipelineCreateInfo.pMultisampleState = &multisampleState;
+  pipelineCreateInfo.pViewportState = &viewportState;
+  pipelineCreateInfo.pDepthStencilState = &depthStencilState;
+  pipelineCreateInfo.pDynamicState = &dynamicState;
+  pipelineCreateInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+  pipelineCreateInfo.pStages = shaderStages.data();
+
+  // Vertex bindings an attributes
+  // Binding description
+  std::vector<VkVertexInputBindingDescription> vertexInputBindings = {
+    vks::initializers::vertexInputBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX),
+  };
+
+  // Attribute descriptions
+  std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
+    vks::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0),                 // Position
+    vks::initializers::vertexInputAttributeDescription(0, 1, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3), // Color
+  };
+
+  VkPipelineVertexInputStateCreateInfo vertexInputState = vks::initializers::pipelineVertexInputStateCreateInfo();
+  vertexInputState.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInputBindings.size());
+  vertexInputState.pVertexBindingDescriptions = vertexInputBindings.data();
+  vertexInputState.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexInputAttributes.size());
+  vertexInputState.pVertexAttributeDescriptions = vertexInputAttributes.data();
+
+  pipelineCreateInfo.pVertexInputState = &vertexInputState;
+
+  shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+  shaderStages[0].pName = "main";
+  shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  shaderStages[1].pName = "main";
+
+  shaderStages[0].module =
+    renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_vert, sizeof(shaders_triangle_vert), device);
+  shaderStages[1].module =
+    renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_frag, sizeof(shaders_triangle_frag), device);
+
+  shaderModules = { shaderStages[0].module, shaderStages[1].module };
+  VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &pipeline));
 }
