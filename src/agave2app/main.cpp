@@ -35,7 +35,6 @@
 class VulkanExample
 {
 public:
-  VkInstance instance;
   VkPhysicalDevice physicalDevice;
   VkDevice device;
   vks::VulkanDevice* vulkanDevice = nullptr;
@@ -47,7 +46,6 @@ public:
   VkDescriptorSetLayout descriptorSetLayout;
   VkPipelineLayout pipelineLayout;
   VkPipeline pipeline;
-  std::vector<VkShaderModule> shaderModules;
   VkBuffer vertexBuffer, indexBuffer;
   VkDeviceMemory vertexMemory, indexMemory;
 
@@ -133,21 +131,13 @@ public:
     LOG("Running headless rendering example\n");
 
     int ok = renderlib::initialize();
-    instance = renderlib::instance();
 
     /*
             Vulkan device creation
     */
     physicalDevice = renderlib::selectPhysicalDevice(1);
+    vulkanDevice = renderlib::createDevice(physicalDevice);
 
-    vulkanDevice = new vks::VulkanDevice(physicalDevice);
-    VkPhysicalDeviceFeatures enabledFeatures{};
-    std::vector<const char*> enabledDeviceExtensions;
-    VkResult res = vulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, nullptr, false);
-    if (res != VK_SUCCESS) {
-      vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(res), res);
-      return;
-    }
     device = vulkanDevice->logicalDevice;
 
     queueFamilyIndex = vulkanDevice->queueFamilyIndices.graphics;
@@ -164,11 +154,6 @@ public:
     /*
             Prepare vertex and index buffers
     */
-    struct Vertex
-    {
-      float position[3];
-      float color[3];
-    };
     {
       std::vector<Vertex> vertices = { { { 1.0f, 1.0f, 0.0f }, { 1.0f, 0.0f, 0.0f } },
                                        { { -1.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } },
@@ -195,11 +180,11 @@ public:
                                      &stagingMemory,
                                      vertices.data()));
 
-        VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                                   vertexBufferSize,
-                                                   &vertexBuffer,
-                                                   &vertexMemory));
+        VK_CHECK_RESULT(vulkanDevice->(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                       vertexBufferSize,
+                                       &vertexBuffer,
+                                       &vertexMemory));
 
         VK_CHECK_RESULT(vkBeginCommandBuffer(copyCmd, &cmdBufInfo));
         VkBufferCopy copyRegion = {};
@@ -249,6 +234,8 @@ public:
     vks::tools::getSupportedDepthFormat(physicalDevice, &depthFormat);
 
     vulkanFramebuffer = new vks::Framebuffer(vulkanDevice);
+    vulkanFramebuffer->width = width;
+    vulkanFramebuffer->height = height;
     // Color attachment
     vks::AttachmentCreateInfo colorAttachmentCreateInfo;
     colorAttachmentCreateInfo.width = width;
@@ -274,113 +261,16 @@ public:
     /*
             Prepare graphics pipeline
     */
-    {
-      std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {};
-      VkDescriptorSetLayoutCreateInfo descriptorLayout =
-        vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-      VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
-
-      VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(nullptr, 0);
-
-      // MVP(modelviewprojection) via push constant block
-      VkPushConstantRange pushConstantRange =
-        vks::initializers::pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(glm::mat4), 0);
-      pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
-      pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
-
-      VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
-
-      VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
-      pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-      VK_CHECK_RESULT(vkCreatePipelineCache(device, &pipelineCacheCreateInfo, nullptr, &pipelineCache));
-
-      // Create pipeline
-      VkPipelineInputAssemblyStateCreateInfo inputAssemblyState =
-        vks::initializers::pipelineInputAssemblyStateCreateInfo(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, 0, VK_FALSE);
-
-      VkPipelineRasterizationStateCreateInfo rasterizationState =
-        vks::initializers::pipelineRasterizationStateCreateInfo(
-          VK_POLYGON_MODE_FILL, VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
-
-      VkPipelineColorBlendAttachmentState blendAttachmentState =
-        vks::initializers::pipelineColorBlendAttachmentState(0xf, VK_FALSE);
-
-      VkPipelineColorBlendStateCreateInfo colorBlendState =
-        vks::initializers::pipelineColorBlendStateCreateInfo(1, &blendAttachmentState);
-
-      VkPipelineDepthStencilStateCreateInfo depthStencilState =
-        vks::initializers::pipelineDepthStencilStateCreateInfo(VK_TRUE, VK_TRUE, VK_COMPARE_OP_LESS_OR_EQUAL);
-
-      VkPipelineViewportStateCreateInfo viewportState = vks::initializers::pipelineViewportStateCreateInfo(1, 1);
-
-      VkPipelineMultisampleStateCreateInfo multisampleState =
-        vks::initializers::pipelineMultisampleStateCreateInfo(VK_SAMPLE_COUNT_1_BIT);
-
-      std::vector<VkDynamicState> dynamicStateEnables = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-      VkPipelineDynamicStateCreateInfo dynamicState =
-        vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
-
-      VkGraphicsPipelineCreateInfo pipelineCreateInfo =
-        vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass);
-
-      std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages{};
-
-      pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
-      pipelineCreateInfo.pRasterizationState = &rasterizationState;
-      pipelineCreateInfo.pColorBlendState = &colorBlendState;
-      pipelineCreateInfo.pMultisampleState = &multisampleState;
-      pipelineCreateInfo.pViewportState = &viewportState;
-      pipelineCreateInfo.pDepthStencilState = &depthStencilState;
-      pipelineCreateInfo.pDynamicState = &dynamicState;
-      pipelineCreateInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
-      pipelineCreateInfo.pStages = shaderStages.data();
-
-      // Vertex bindings an attributes
-      // Binding description
-      std::vector<VkVertexInputBindingDescription> vertexInputBindings = {
-        vks::initializers::vertexInputBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX),
-      };
-
-      // Attribute descriptions
-      std::vector<VkVertexInputAttributeDescription> vertexInputAttributes = {
-        vks::initializers::vertexInputAttributeDescription(0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0), // Position
-        vks::initializers::vertexInputAttributeDescription(
-          0, 1, VK_FORMAT_R32G32B32_SFLOAT, sizeof(float) * 3), // Color
-      };
-
-      VkPipelineVertexInputStateCreateInfo vertexInputState = vks::initializers::pipelineVertexInputStateCreateInfo();
-      vertexInputState.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInputBindings.size());
-      vertexInputState.pVertexBindingDescriptions = vertexInputBindings.data();
-      vertexInputState.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexInputAttributes.size());
-      vertexInputState.pVertexAttributeDescriptions = vertexInputAttributes.data();
-
-      pipelineCreateInfo.pVertexInputState = &vertexInputState;
-
-      shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-      shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-      shaderStages[0].pName = "main";
-      shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-      shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-      shaderStages[1].pName = "main";
-
-      shaderStages[0].module =
-        renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_vert, sizeof(shaders_triangle_vert), device);
-      shaderStages[1].module =
-        renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_frag, sizeof(shaders_triangle_frag), device);
-
-      shaderModules = { shaderStages[0].module, shaderStages[1].module };
-      VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &pipeline));
-    }
+    VK_CHECK_RESULT(
+      renderlib::createGraphicsPipeline(device, vulkanFramebuffer->renderPass, &pipeline, &pipelineCache));
 
     /*
             Command buffer creation
     */
-    {
-      VkCommandBuffer commandBuffer;
-      VkCommandBufferAllocateInfo cmdBufAllocateInfo =
-        vks::initializers::commandBufferAllocateInfo(commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
-      VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &commandBuffer));
+    VkCommandBuffer commandBuffer =
+      vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandPool, false);
 
+    {
       VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
 
       VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &cmdBufInfo));
@@ -395,8 +285,8 @@ public:
       renderPassBeginInfo.renderArea.extent.height = height;
       renderPassBeginInfo.clearValueCount = 2;
       renderPassBeginInfo.pClearValues = clearValues;
-      renderPassBeginInfo.renderPass = renderPass;
-      renderPassBeginInfo.framebuffer = framebuffer;
+      renderPassBeginInfo.renderPass = vulkanFramebuffer->renderPass;
+      renderPassBeginInfo.framebuffer = vulkanFramebuffer->framebuffer;
 
       vkCmdBeginRenderPass(commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -611,10 +501,6 @@ public:
     vkDestroyPipeline(device, pipeline, nullptr);
     vkDestroyPipelineCache(device, pipelineCache, nullptr);
     vkDestroyCommandPool(device, commandPool, nullptr);
-    for (auto shadermodule : shaderModules) {
-      vkDestroyShaderModule(device, shadermodule, nullptr);
-    }
-    delete vulkanDevice;
 
     renderlib::cleanup();
   }

@@ -1,5 +1,9 @@
 #include "renderlib.h"
 
+#include "shaders/triangle.frag.h"
+#include "shaders/triangle.vert.h"
+
+#include "VulkanDevice.hpp"
 #include "VulkanTools.h"
 
 #define GLM_FORCE_RADIANS
@@ -12,6 +16,8 @@
 
 static VkInstance sInstance = nullptr;
 static std::vector<VkPhysicalDevice> sPhysicalDevices;
+static vks::VulkanDevice* sVulkanDevice = nullptr;
+static std::vector<VkShaderModule> sShaderModules;
 
 static VkDebugReportCallbackEXT debugReportCallback{};
 
@@ -144,9 +150,30 @@ renderlib::selectPhysicalDevice(size_t which)
   return physicalDevice;
 }
 
+vks::VulkanDevice*
+renderlib::createDevice(VkPhysicalDevice physicalDevice)
+{
+  sVulkanDevice = new vks::VulkanDevice(physicalDevice);
+  VkPhysicalDeviceFeatures enabledFeatures{};
+  std::vector<const char*> enabledDeviceExtensions;
+  VkResult res = sVulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, nullptr, false);
+  if (res != VK_SUCCESS) {
+    vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(res), res);
+    return nullptr;
+  }
+
+  return sVulkanDevice;
+}
+
 void
 renderlib::cleanup()
 {
+
+  for (auto shadermodule : sShaderModules) {
+    vkDestroyShaderModule(sVulkanDevice->logicalDevice, shadermodule, nullptr);
+  }
+  delete sVulkanDevice;
+
 #if DEBUG
   if (debugReportCallback) {
     PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback =
@@ -183,7 +210,10 @@ renderlib::loadShaderFromPtr(uint32_t* shaderCode, size_t size, VkDevice device)
 }
 
 VkResult
-renderlib::createGraphicsPipeline(VkDevice device, VkPipeline* pipeline, VkPipelineCache* pipelineCache)
+renderlib::createGraphicsPipeline(VkDevice device,
+                                  VkRenderPass renderPass,
+                                  VkPipeline* pipeline,
+                                  VkPipelineCache* pipelineCache)
 {
   // TODO from caller, must be cleaned up later.
   VkDescriptorSetLayout descriptorSetLayout;
@@ -279,6 +309,6 @@ renderlib::createGraphicsPipeline(VkDevice device, VkPipeline* pipeline, VkPipel
   shaderStages[1].module =
     renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_frag, sizeof(shaders_triangle_frag), device);
 
-  shaderModules = { shaderStages[0].module, shaderStages[1].module };
-  VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &pipeline));
+  sShaderModules = { shaderStages[0].module, shaderStages[1].module };
+  VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, *pipelineCache, 1, &pipelineCreateInfo, nullptr, pipeline));
 }
