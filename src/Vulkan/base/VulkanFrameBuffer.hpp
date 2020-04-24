@@ -213,9 +213,9 @@ namespace vks
 			if (attachment.hasDepth() || attachment.hasStencil())
 			{
 				attachment.description.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-			}
-			else
-			{
+    } else if (image.usage | VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+      attachment.description.finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    } else {
 				attachment.description.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			}
 
