@@ -34,5 +34,6 @@ public:
   static VkResult createGraphicsPipeline(VkDevice device,
                                          VkRenderPass renderPass,
                                          VkPipeline* pipeline,
-                                         VkPipelineCache* pipelineCache);
+                                         VkPipelineCache* pipelineCache,
+                                         VkPipelineLayout* pipelineLayout);
 };

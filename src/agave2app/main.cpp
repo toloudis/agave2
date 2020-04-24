@@ -261,8 +261,8 @@ public:
     /*
             Prepare graphics pipeline
     */
-    VK_CHECK_RESULT(
-      renderlib::createGraphicsPipeline(device, vulkanFramebuffer->renderPass, &pipeline, &pipelineCache));
+    VK_CHECK_RESULT(renderlib::createGraphicsPipeline(
+      device, vulkanFramebuffer->renderPass, &pipeline, &pipelineCache, &pipelineLayout));
 
     /*
             Command buffer creation
@@ -400,7 +400,8 @@ public:
       imageCopyRegion.extent.depth = 1;
 
       vkCmdCopyImage(copyCmd,
-                     colorAttachment.image,
+                     vulkanFramebuffer->attachments[0].image,
+                     // colorAttachment.image,
                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                      dstImage,
                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,

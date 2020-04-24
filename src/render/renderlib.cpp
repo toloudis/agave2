@@ -213,11 +213,11 @@ VkResult
 renderlib::createGraphicsPipeline(VkDevice device,
                                   VkRenderPass renderPass,
                                   VkPipeline* pipeline,
-                                  VkPipelineCache* pipelineCache)
+                                  VkPipelineCache* pipelineCache,
+                                  VkPipelineLayout* pipelineLayout)
 {
   // TODO from caller, must be cleaned up later.
   VkDescriptorSetLayout descriptorSetLayout;
-  VkPipelineLayout pipelineLayout;
 
   std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {};
   VkDescriptorSetLayoutCreateInfo descriptorLayout =
@@ -232,7 +232,7 @@ renderlib::createGraphicsPipeline(VkDevice device,
   pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
   pipelineLayoutCreateInfo.pPushConstantRanges = &pushConstantRange;
 
-  VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
+  VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, pipelineLayout));
 
   VkPipelineCacheCreateInfo pipelineCacheCreateInfo = {};
   pipelineCacheCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -263,7 +263,7 @@ renderlib::createGraphicsPipeline(VkDevice device,
   VkPipelineDynamicStateCreateInfo dynamicState =
     vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
 
-  VkGraphicsPipelineCreateInfo pipelineCreateInfo = vks::initializers::pipelineCreateInfo(pipelineLayout, renderPass);
+  VkGraphicsPipelineCreateInfo pipelineCreateInfo = vks::initializers::pipelineCreateInfo(*pipelineLayout, renderPass);
 
   std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages{};
 
