@@ -180,11 +180,11 @@ public:
                                      &stagingMemory,
                                      vertices.data()));
 
-        VK_CHECK_RESULT(vulkanDevice->(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-                                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                       vertexBufferSize,
-                                       &vertexBuffer,
-                                       &vertexMemory));
+        VK_CHECK_RESULT(vulkanDevice->createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                                                   vertexBufferSize,
+                                                   &vertexBuffer,
+                                                   &vertexMemory));
 
         VK_CHECK_RESULT(vkBeginCommandBuffer(copyCmd, &cmdBufInfo));
         VkBufferCopy copyRegion = {};

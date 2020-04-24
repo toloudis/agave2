@@ -310,5 +310,5 @@ renderlib::createGraphicsPipeline(VkDevice device,
     renderlib::loadShaderFromPtr((uint32_t*)shaders_triangle_frag, sizeof(shaders_triangle_frag), device);
 
   sShaderModules = { shaderStages[0].module, shaderStages[1].module };
-  VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, *pipelineCache, 1, &pipelineCreateInfo, nullptr, pipeline));
+  return vkCreateGraphicsPipelines(device, *pipelineCache, 1, &pipelineCreateInfo, nullptr, pipeline);
 }
