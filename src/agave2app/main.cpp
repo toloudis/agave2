@@ -43,7 +43,6 @@ public:
   VkQueue queue;
   VkCommandPool commandPool;
   VkCommandBuffer commandBuffer;
-  VkDescriptorSetLayout descriptorSetLayout;
   VkPipelineLayout pipelineLayout;
   VkPipeline pipeline;
   VkBuffer vertexBuffer, indexBuffer;
@@ -56,9 +55,8 @@ public:
     VkImageView view;
   };
   int32_t width, height;
-  VkFramebuffer framebuffer;
-  FrameBufferAttachment colorAttachment, depthAttachment;
-  VkRenderPass renderPass;
+  //  VkFramebuffer framebuffer;
+  //  VkRenderPass renderPass;
 
   vks::Framebuffer* vulkanFramebuffer = nullptr;
 
@@ -489,16 +487,8 @@ public:
     vkFreeMemory(device, vertexMemory, nullptr);
     vkDestroyBuffer(device, indexBuffer, nullptr);
     vkFreeMemory(device, indexMemory, nullptr);
-    vkDestroyImageView(device, colorAttachment.view, nullptr);
-    vkDestroyImage(device, colorAttachment.image, nullptr);
-    vkFreeMemory(device, colorAttachment.memory, nullptr);
-    vkDestroyImageView(device, depthAttachment.view, nullptr);
-    vkDestroyImage(device, depthAttachment.image, nullptr);
-    vkFreeMemory(device, depthAttachment.memory, nullptr);
-    vkDestroyRenderPass(device, renderPass, nullptr);
-    vkDestroyFramebuffer(device, framebuffer, nullptr);
+    delete vulkanFramebuffer;
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
     vkDestroyPipeline(device, pipeline, nullptr);
     vkDestroyPipelineCache(device, pipelineCache, nullptr);
     vkDestroyCommandPool(device, commandPool, nullptr);
