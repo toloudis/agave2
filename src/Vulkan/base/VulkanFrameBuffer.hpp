@@ -93,6 +93,11 @@ public:
    */
   Framebuffer(vks::VulkanDevice* vulkanDevice)
   {
+    width = 0;
+    height = 0;
+    framebuffer = 0;
+    renderPass = 0;
+    sampler = 0;
     assert(vulkanDevice);
     this->vulkanDevice = vulkanDevice;
   }
@@ -108,7 +113,9 @@ public:
       vkDestroyImageView(vulkanDevice->logicalDevice, attachment.view, nullptr);
       vkFreeMemory(vulkanDevice->logicalDevice, attachment.memory, nullptr);
     }
-    vkDestroySampler(vulkanDevice->logicalDevice, sampler, nullptr);
+    if (sampler) {
+      vkDestroySampler(vulkanDevice->logicalDevice, sampler, nullptr);
+    }
     vkDestroyRenderPass(vulkanDevice->logicalDevice, renderPass, nullptr);
     vkDestroyFramebuffer(vulkanDevice->logicalDevice, framebuffer, nullptr);
   }
