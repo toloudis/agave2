@@ -141,6 +141,10 @@ renderlib::initialize(const char* appName, uint32_t requiredExtensionCount, cons
 VkPhysicalDevice
 renderlib::selectPhysicalDevice(size_t which)
 {
+  assert(sPhysicalDevices.size() > 0);
+  if (which >= sPhysicalDevices.size()) {
+    which = 0;
+  }
   VkPhysicalDevice physicalDevice = sPhysicalDevices[which];
 
   VkPhysicalDeviceProperties deviceProperties;
