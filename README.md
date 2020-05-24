@@ -3,14 +3,31 @@
 TODO
 
 ```
-graphicsApi = Graphics::init("Vulkan");
-Graphics::Device* device = graphicsApi->getDevice();
-// create various renderers
-Graphics::SceneRenderer* renderer = device->CreateSingleVolumePathTraceRenderer();
-Graphics::Mesh* mesh = device->CreateMesh(vertices, ...);
 
-Graphics::Shader* shader = device->CreateShader("shaderName") ???
-// or are shaders completely internalized and not exposed
+// implementation choice happens here only
+Graphics* graphics = new GraphicsVk();
+
+// configure: select devices, load some stuff etc
+bool ok = graphics->init();
+if (!ok) then fail
+
+// this can load a bunch of shaders etc
+SceneRenderer* r = graphics->CreateDefaultRenderer();
+SceneRenderer* r = graphics->CreateNormalsRenderer();
+ScenePickRenderer* r = graphics->CreatePickRenderer(); // separate interface?
+
+// create window.
+RenderTarget* tgt = graphics->createWindowRenderTarget();
+// or
+RenderTarget* tgt = graphics->createImageRenderTarget();
+
+r->Render(tgt);
+
+tgt->Swap() // flush
+tgt->GetImage() // get pixels
+
+graphics->cleanup()
+
 ```
 
 ## Windows:
