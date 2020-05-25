@@ -1,4 +1,5 @@
 
+class RenderTarget;
 class SceneRenderer;
 
 // Graphics* graphics = new GraphicsVk();
@@ -20,5 +21,10 @@ public:
   virtual bool init() = 0;
   virtual bool cleanup() = 0;
 
-  virtual SceneRenderer* CreateDefaultRenderer() = 0;
+  virtual SceneRenderer* createDefaultRenderer() = 0;
+  virtual SceneRenderer* createNormalsRenderer() = 0;
+  // virtual ScenePickRenderer* r = graphics->CreatePickRenderer(); // separate interface?
+
+  virtual RenderTarget* createWindowRenderTarget() = 0;
+  virtual RenderTarget* createImageRenderTarget() = 0;
 };
