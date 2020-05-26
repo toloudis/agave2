@@ -1,4 +1,6 @@
 
+#pragma once
+
 class RenderTarget;
 class SceneRenderer;
 
@@ -18,6 +20,9 @@ class SceneRenderer;
 class Graphics
 {
 public:
+  Graphics() {}
+  virtual ~Graphics() {}
+
   virtual bool init() = 0;
   virtual bool cleanup() = 0;
 

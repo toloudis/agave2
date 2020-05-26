@@ -1,3 +1,6 @@
+add_subdirectory(graphics)
+add_subdirectory(graphicsvk)
+
 # let external dir be included everywhere
 include_directories(
     external/glm

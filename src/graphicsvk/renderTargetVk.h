@@ -1,11 +1,13 @@
 #pragma once
 
+#include "graphics/renderTarget.h"
+
 // abstract either a buffer of image pixels or a swapchain tied to a window
-class RenderTarget
+class RenderTargetVk : public RenderTarget
 {
 public:
   // flush all rendering commands and swapbuffers
-  virtual void swap() = 0;
+  void swap() override {}
   // block till rendering is done and return pixels data as a pointer to system memory
-  virtual void* getPixels(/* optional rectangle ? */) = 0;
+  void* getPixels(/* optional rectangle ? */) override {}
 };
