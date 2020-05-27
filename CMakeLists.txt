@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.15)
+
+if (POLICY CMP0048)
+  cmake_policy(SET CMP0048 NEW)
+endif (POLICY CMP0048)
+
 project(
     agave2
     VERSION 1.0.0
