@@ -26,6 +26,8 @@
 #include "shaders/triangle.frag.h"
 #include "shaders/triangle.vert.h"
 
+#include "graphicsvk/graphicsVk.h"
+
 #define DEBUG (!NDEBUG)
 
 #define BUFFER_ELEMENTS 32
@@ -500,9 +502,17 @@ public:
 int
 main()
 {
+  Graphics* graphics = new GraphicsVk();
+  bool ok = graphics->init();
+  if (!ok) {
+    std::cout << "Could not init Graphics";
+  }
   VulkanExample* vulkanExample = new VulkanExample();
   std::cout << "Finished. Press enter to terminate...";
   getchar();
   delete (vulkanExample);
+
+  delete graphics;
+
   return 0;
 }
