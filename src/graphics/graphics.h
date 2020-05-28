@@ -17,6 +17,12 @@ class SceneRenderer;
 // tgt->GetImage() // get pixels
 // graphics->cleanup()
 
+enum PixelFormat
+{
+  RGBA8U,
+  RGBA32F
+};
+
 class Graphics
 {
 public:
@@ -31,5 +37,5 @@ public:
   // virtual ScenePickRenderer* r = graphics->CreatePickRenderer(); // separate interface?
 
   virtual RenderTarget* createWindowRenderTarget() = 0;
-  virtual RenderTarget* createImageRenderTarget() = 0;
+  virtual RenderTarget* createImageRenderTarget(int width, int height, PixelFormat format = PixelFormat::RGBA8U) = 0;
 };

@@ -26,6 +26,9 @@
 #include "shaders/triangle.frag.h"
 #include "shaders/triangle.vert.h"
 
+#include "graphics/renderTarget.h"
+#include "graphics/sceneRenderer.h"
+
 #include "graphicsvk/graphicsVk.h"
 
 #define DEBUG (!NDEBUG)
@@ -33,6 +36,35 @@
 #define BUFFER_ELEMENTS 32
 
 #define LOG(...) printf(__VA_ARGS__)
+
+void
+save(const char* imagedata, size_t rowPitch, int width, int height, bool colorSwizzle)
+{
+  const char* filename = "headless.ppm";
+
+  std::ofstream file(filename, std::ios::out | std::ios::binary);
+
+  // ppm header
+  file << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
+
+  // ppm binary pixel data
+  for (int32_t y = 0; y < height; y++) {
+    unsigned int* row = (unsigned int*)imagedata;
+    for (int32_t x = 0; x < width; x++) {
+      if (colorSwizzle) {
+        file.write((char*)row + 2, 1);
+        file.write((char*)row + 1, 1);
+        file.write((char*)row, 1);
+      } else {
+        file.write((char*)row, 3);
+      }
+      row++;
+    }
+    imagedata += rowPitch;
+  }
+  file.close();
+  LOG("Framebuffer image saved to %s\n", filename);
+}
 
 class VulkanExample
 {
@@ -438,14 +470,6 @@ public:
       /*
               Save host visible framebuffer image to disk (ppm format)
       */
-
-      const char* filename = "headless.ppm";
-
-      std::ofstream file(filename, std::ios::out | std::ios::binary);
-
-      // ppm header
-      file << "P6\n" << width << "\n" << height << "\n" << 255 << "\n";
-
       // If source is BGR (destination is always RGB) and we can't use blit
       // (which does automatic conversion), we'll have to manually swizzle color
       // components Check if source is BGR and needs swizzle
@@ -455,24 +479,7 @@ public:
       const bool colorSwizzle =
         (std::find(formatsBGR.begin(), formatsBGR.end(), VK_FORMAT_R8G8B8A8_UNORM) != formatsBGR.end());
 
-      // ppm binary pixel data
-      for (int32_t y = 0; y < height; y++) {
-        unsigned int* row = (unsigned int*)imagedata;
-        for (int32_t x = 0; x < width; x++) {
-          if (colorSwizzle) {
-            file.write((char*)row + 2, 1);
-            file.write((char*)row + 1, 1);
-            file.write((char*)row, 1);
-          } else {
-            file.write((char*)row, 3);
-          }
-          row++;
-        }
-        imagedata += subResourceLayout.rowPitch;
-      }
-      file.close();
-
-      LOG("Framebuffer image saved to %s\n", filename);
+      save(imagedata, subResourceLayout.rowPitch, width, height, colorSwizzle);
 
       // Clean up resources
       vkUnmapMemory(device, dstImageMemory);
@@ -507,6 +514,18 @@ main()
   if (!ok) {
     std::cout << "Could not init Graphics";
   }
+  SceneRenderer* renderer = graphics->createDefaultRenderer();
+  int width = 512;
+  int height = 512;
+  RenderTarget* rendertarget = graphics->createImageRenderTarget(512, 512);
+  Camera camera;
+  Scene scene;
+  renderer->render(rendertarget, camera, scene);
+  rendertarget->swap();
+  const void* pixels = rendertarget->getPixels();
+  // save pixels to file
+  save(reinterpret_cast<const char*>(pixels), width * 4, width, height, false);
+
   VulkanExample* vulkanExample = new VulkanExample();
   std::cout << "Finished. Press enter to terminate...";
   getchar();
