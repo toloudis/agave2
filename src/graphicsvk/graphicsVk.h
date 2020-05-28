@@ -24,6 +24,13 @@ public:
   RenderTarget* createWindowRenderTarget() override;
   RenderTarget* createImageRenderTarget(int width, int height, PixelFormat format = PixelFormat::RGBA8U) override;
 
+  Mesh* createMesh(uint32_t i_nVertices,
+                   const float* i_Vertices,
+                   const float* i_Normals,
+                   const float* i_UVs,
+                   uint32_t i_nIndices,
+                   const uint32_t* i_Indices) override;
+
 private:
   VkPhysicalDevice selectPhysicalDevice(size_t which);
   vks::VulkanDevice* createDevice(VkPhysicalDevice physicalDevice);

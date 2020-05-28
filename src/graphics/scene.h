@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+class SceneObject;
 // class ImageXYZC;
 
 #define MAX_CPU_CHANNELS 32
@@ -174,6 +175,9 @@ class Scene
 {
 public:
   Scene() {}
+
+  void add(SceneObject* object) { m_objects.push_back(object); }
+  std::vector<SceneObject*> m_objects;
 
   Timeline m_timeLine;
   // one single volume, for now...!

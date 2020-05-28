@@ -1,9 +1,12 @@
 add_library(graphicsvk STATIC 
 "${CMAKE_CURRENT_SOURCE_DIR}/graphicsVk.h"
 "${CMAKE_CURRENT_SOURCE_DIR}/graphicsVk.cpp"
+"${CMAKE_CURRENT_SOURCE_DIR}/meshVk.h"
+"${CMAKE_CURRENT_SOURCE_DIR}/meshVk.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/renderTargetVk.h"
 "${CMAKE_CURRENT_SOURCE_DIR}/renderTargetVk.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/sceneRendererVk.h"
+"${CMAKE_CURRENT_SOURCE_DIR}/sceneRendererVk.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/VulkanBuffer.hpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/VulkanDebug.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/VulkanDebug.h"

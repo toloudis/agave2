@@ -29,6 +29,7 @@
 #include "graphics/camera.h"
 #include "graphics/renderTarget.h"
 #include "graphics/scene.h"
+#include "graphics/sceneObject.h"
 #include "graphics/sceneRenderer.h"
 
 #include "graphicsvk/graphicsVk.h"
@@ -521,7 +522,15 @@ main()
   int height = 512;
   RenderTarget* rendertarget = graphics->createImageRenderTarget(512, 512);
   Camera camera;
+
   Scene scene;
+
+  float positions[] = { 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f };
+  uint32_t indices[] = { 0, 1, 2 };
+  Mesh* mesh = graphics->createMesh(3, positions, nullptr, nullptr, 3, indices);
+  SceneObject* triangle = new SceneObject(mesh);
+  scene.add(triangle);
+
   renderer->render(rendertarget, camera, scene);
   rendertarget->swap();
   const void* pixels = rendertarget->getPixels();

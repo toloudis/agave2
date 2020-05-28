@@ -1,6 +1,8 @@
 #include "graphicsVk.h"
 
+#include "meshVk.h"
 #include "renderTargetVk.h"
+#include "sceneRendererVk.h"
 
 #include "VulkanDevice.hpp"
 #include "VulkanFrameBuffer.hpp"
@@ -185,6 +187,9 @@ GraphicsVk::createDevice(VkPhysicalDevice physicalDevice)
 bool
 GraphicsVk::cleanup()
 {
+  // this must be called LATE.  All objects created from here must already be destroyed.
+  // destroy everything created after the device
+  // and then destroy the device and the instance
 
   for (auto shadermodule : sShaderModules) {
     vkDestroyShaderModule(sVulkanDevice->logicalDevice, shadermodule, nullptr);
@@ -208,7 +213,7 @@ GraphicsVk::cleanup()
 SceneRenderer*
 GraphicsVk::createDefaultRenderer()
 {
-  return nullptr;
+  return new SceneRendererVk(sVulkanDevice);
 }
 
 SceneRenderer*
@@ -226,6 +231,18 @@ GraphicsVk::createWindowRenderTarget()
 RenderTarget*
 GraphicsVk::createImageRenderTarget(int width, int height, PixelFormat format)
 {
-  RenderTargetVk* rt = new RenderTargetVk(width, height, format);
+  RenderTargetVk* rt = new RenderTargetVk(sVulkanDevice, width, height, format);
   return rt;
+}
+
+Mesh*
+GraphicsVk::createMesh(uint32_t i_nVertices,
+                       const float* i_Vertices,
+                       const float* i_Normals,
+                       const float* i_UVs,
+                       uint32_t i_nIndices,
+                       const uint32_t* i_Indices)
+{
+  MeshVk* mesh = new MeshVk(sVulkanDevice, i_nVertices, i_Vertices, i_Normals, i_UVs, i_nIndices, i_Indices);
+  return mesh;
 }
