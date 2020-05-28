@@ -13,6 +13,6 @@ target_link_libraries(agave2app
     ${Vulkan_LIBRARIES}
     render
     base
-#    graphics
+    graphics
     graphicsvk
 )

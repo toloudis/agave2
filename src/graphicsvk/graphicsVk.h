@@ -27,4 +27,5 @@ public:
 private:
   VkPhysicalDevice selectPhysicalDevice(size_t which);
   vks::VulkanDevice* createDevice(VkPhysicalDevice physicalDevice);
+  void logPhysicalDevices();
 };

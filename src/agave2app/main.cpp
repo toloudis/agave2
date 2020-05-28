@@ -26,7 +26,9 @@
 #include "shaders/triangle.frag.h"
 #include "shaders/triangle.vert.h"
 
+#include "graphics/camera.h"
 #include "graphics/renderTarget.h"
+#include "graphics/scene.h"
 #include "graphics/sceneRenderer.h"
 
 #include "graphicsvk/graphicsVk.h"

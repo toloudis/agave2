@@ -33,7 +33,7 @@ debugMessageCallback(VkDebugReportFlagsEXT flags,
 }
 
 void
-logPhysicalDevices()
+GraphicsVk::logPhysicalDevices()
 {
   for (auto physicalDevice : sPhysicalDevices) {
     VkPhysicalDeviceProperties deviceProperties;

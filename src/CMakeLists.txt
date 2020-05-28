@@ -1,5 +1,3 @@
-add_subdirectory(graphics)
-add_subdirectory(graphicsvk)
 
 # let external dir be included everywhere
 include_directories(
@@ -10,6 +8,10 @@ include_directories(
 )
 
 add_subdirectory(external)
+
+add_subdirectory(graphics)
+add_subdirectory(graphicsvk)
+
 add_subdirectory(Vulkan/base)
 add_subdirectory(render)
 
