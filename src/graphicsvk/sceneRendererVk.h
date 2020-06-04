@@ -26,10 +26,10 @@ public:
 
 private:
   vks::VulkanDevice* m_device = nullptr;
-  VkCommandPool m_commandPool = nullptr;
-  VkQueue m_queue = nullptr;
-  VkShaderModule m_triangleVS = nullptr;
-  VkShaderModule m_triangleFS = nullptr;
+  VkCommandPool m_commandPool = VK_NULL_HANDLE;
+  VkQueue m_queue = VK_NULL_HANDLE;
+  VkShaderModule m_triangleVS = VK_NULL_HANDLE;
+  VkShaderModule m_triangleFS = VK_NULL_HANDLE;
 
   VkResult createGraphicsPipeline(VkDevice device,
                                   VkRenderPass renderPass,

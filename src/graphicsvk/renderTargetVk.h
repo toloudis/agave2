@@ -29,7 +29,7 @@ public:
 
 private:
   vks::VulkanDevice* m_device = nullptr;
-  VkQueue m_queue = nullptr;
+  VkQueue m_queue = VK_NULL_HANDLE;
   int m_width = 0;
   int m_height = 0;
   PixelFormat m_format = PixelFormat::RGBA8U;

@@ -35,11 +35,11 @@ public:
 
 private:
   vks::VulkanDevice* m_device = nullptr;
-  VkCommandPool m_commandPool = nullptr;
-  VkQueue m_queue = nullptr;
+  VkCommandPool m_commandPool = VK_NULL_HANDLE;
+  VkQueue m_queue = VK_NULL_HANDLE;
 
-  VkBuffer m_vertexBuffer = nullptr, m_indexBuffer = nullptr;
-  VkDeviceMemory m_vertexMemory = nullptr, m_indexMemory = nullptr;
-  VkDescriptorPool m_descriptorPool = nullptr;
-  VkDescriptorSetLayout m_descriptorSetLayout = nullptr;
+  VkBuffer m_vertexBuffer = VK_NULL_HANDLE, m_indexBuffer = VK_NULL_HANDLE;
+  VkDeviceMemory m_vertexMemory = VK_NULL_HANDLE, m_indexMemory = VK_NULL_HANDLE;
+  VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+  VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
 };
