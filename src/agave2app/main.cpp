@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <assert.h>
+#include <fstream>
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,15 +17,15 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "VulkanDevice.hpp"
-#include "VulkanFrameBuffer.hpp"
-#include "VulkanTools.h"
-#include <vulkan/vulkan.h>
+// #include "VulkanDevice.hpp"
+// #include "VulkanFrameBuffer.hpp"
+// #include "VulkanTools.h"
+// #include <vulkan/vulkan.h>
 
-#include "renderer.h"
-#include "renderlib.h"
-#include "shaders/triangle.frag.h"
-#include "shaders/triangle.vert.h"
+// #include "renderer.h"
+// #include "renderlib.h"
+// #include "shaders/triangle.frag.h"
+// #include "shaders/triangle.vert.h"
 
 #include "graphics/camera.h"
 #include "graphics/mesh.h"
@@ -73,6 +74,7 @@ save(const char* imagedata, size_t rowPitch, int width, int height, bool colorSw
   LOG("Framebuffer image saved to %s\n", filename);
 }
 
+#if 0
 class VulkanExample
 {
 public:
@@ -460,7 +462,7 @@ public:
     renderlib::cleanup();
   }
 };
-
+#endif
 int
 main()
 {

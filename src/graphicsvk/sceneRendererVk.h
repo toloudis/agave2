@@ -12,6 +12,7 @@ class SceneRendererVk : public SceneRenderer
 {
 public:
   SceneRendererVk(vks::VulkanDevice* vulkanDevice);
+  ~SceneRendererVk();
 
   // rendertarget should either be some kind of generic image container or a swapchain tied to a window.
   // the render call can modify it.
@@ -27,4 +28,12 @@ private:
   vks::VulkanDevice* m_device = nullptr;
   VkCommandPool m_commandPool = nullptr;
   VkQueue m_queue = nullptr;
+  VkShaderModule m_triangleVS = nullptr;
+  VkShaderModule m_triangleFS = nullptr;
+
+  VkResult createGraphicsPipeline(VkDevice device,
+                                  VkRenderPass renderPass,
+                                  VkPipeline* pipeline,
+                                  VkPipelineCache* pipelineCache,
+                                  VkPipelineLayout* pipelineLayout);
 };

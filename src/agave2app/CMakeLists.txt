@@ -11,7 +11,7 @@ target_sources(agave2app PRIVATE
 
 target_link_libraries(agave2app 
     ${Vulkan_LIBRARIES}
-    render
+#    render
     base
     graphics
     graphicsvk

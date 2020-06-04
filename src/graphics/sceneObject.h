@@ -10,6 +10,9 @@ class SceneObject
 public:
   SceneObject(Mesh* mesh);
 
+  Mesh* getMesh() const { return m_mesh; }
+  glm::mat4 getTransform() const { return m_transform; }
+
 private:
   // keep transform, translation and rotation in sync?
   glm::mat4 m_transform;

@@ -1,3 +1,10 @@
+add_subdirectory(shaders)
+
+spirv_shaders(SHADER_HEADERS
+  shaders/triangle.vert
+  shaders/triangle.frag
+)
+
 add_library(graphicsvk STATIC 
 "${CMAKE_CURRENT_SOURCE_DIR}/graphicsVk.h"
 "${CMAKE_CURRENT_SOURCE_DIR}/graphicsVk.cpp"
@@ -20,6 +27,7 @@ add_library(graphicsvk STATIC
 "${CMAKE_CURRENT_SOURCE_DIR}/VulkanTexture.hpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/VulkanTools.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/VulkanTools.h"
+${SHADER_HEADERS}
 )
 
 

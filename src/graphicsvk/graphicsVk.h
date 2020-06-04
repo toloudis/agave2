@@ -31,6 +31,8 @@ public:
                    uint32_t i_nIndices,
                    const uint32_t* i_Indices) override;
 
+  static VkShaderModule loadShaderFromPtr(uint32_t* shaderCode, size_t size, VkDevice device);
+
 private:
   VkInstance createInstance();
 

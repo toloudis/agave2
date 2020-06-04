@@ -285,6 +285,24 @@ GraphicsVk::createMesh(uint32_t i_nVertices,
                        uint32_t i_nIndices,
                        const uint32_t* i_Indices)
 {
-  MeshVk* mesh = new MeshVk(sVulkanDevice, i_nVertices, i_Vertices, i_Normals, i_UVs, i_nIndices, i_Indices);
+  MeshVk* mesh =
+    new MeshVk(sVulkanDevice, sCommandPool, sQueue, i_nVertices, i_Vertices, i_Normals, i_UVs, i_nIndices, i_Indices);
   return mesh;
+}
+
+VkShaderModule
+GraphicsVk::loadShaderFromPtr(uint32_t* shaderCode, size_t size, VkDevice device)
+{
+  assert(size > 0);
+  assert(shaderCode != nullptr);
+
+  VkShaderModule shaderModule;
+  VkShaderModuleCreateInfo moduleCreateInfo{};
+  moduleCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  moduleCreateInfo.codeSize = size;
+  moduleCreateInfo.pCode = (uint32_t*)shaderCode;
+
+  VK_CHECK_RESULT(vkCreateShaderModule(device, &moduleCreateInfo, NULL, &shaderModule));
+
+  return shaderModule;
 }
