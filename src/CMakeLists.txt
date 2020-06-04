@@ -12,8 +12,5 @@ add_subdirectory(external)
 add_subdirectory(graphics)
 add_subdirectory(graphicsvk)
 
-add_subdirectory(Vulkan/base)
-add_subdirectory(render)
-
 # app comes last after deps build?
 add_subdirectory(agave2app)

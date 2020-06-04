@@ -39,6 +39,7 @@ target_include_directories(graphicsvk PUBLIC
 target_link_libraries(graphicsvk 
   graphics
   ${Vulkan_LIBRARY}
+  ${Vulkan_LIBRARIES}
   ktx
 )
 
