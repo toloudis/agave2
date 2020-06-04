@@ -12,6 +12,10 @@
 static VkInstance sInstance = nullptr;
 static std::vector<VkPhysicalDevice> sPhysicalDevices;
 static vks::VulkanDevice* sVulkanDevice = nullptr;
+// associated with device.  device, commandpool, and queue could potentially be grouped together
+static VkCommandPool sCommandPool = nullptr;
+static VkQueue sQueue = nullptr;
+
 static std::vector<VkShaderModule> sShaderModules;
 
 static VkDebugReportCallbackEXT debugReportCallback{};
@@ -58,7 +62,36 @@ GraphicsVk::init()
   // choose a default graphics device for top level functions,
   // prepare other devices for other computation tasks?
 
+  sInstance = createInstance();
+
+  // get all physical devices
+  uint32_t deviceCount = 0;
+  VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, nullptr));
+  if (deviceCount == 0) {
+    return false;
+  }
+  std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
+  VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, physicalDevices.data()));
+  sPhysicalDevices = physicalDevices;
+
+  logPhysicalDevices();
+
+  // select a default device
+  VkPhysicalDevice physicalDevice;
+  VkDevice device;
+  vks::VulkanDevice* vulkanDevice = nullptr;
+  physicalDevice = selectPhysicalDevice();
+  vulkanDevice = createDevice(physicalDevice);
+  device = vulkanDevice->logicalDevice;
+
+  return true;
+}
+
+VkInstance
+GraphicsVk::createInstance()
+{
   uint32_t requiredExtensionCount = 0;
+  // TODO VK_KHR_SURFACE_EXTENSION_NAME
   const char** requiredExtensionNames = nullptr;
   const char* appName = "APP NAME";
 
@@ -66,6 +99,7 @@ GraphicsVk::init()
   appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   appInfo.pApplicationName = appName;
   appInfo.pEngineName = "AGAVE2";
+  // TODO: 1.1?  1.2?  check availability vkEnumerateInstanceVersion
   appInfo.apiVersion = VK_API_VERSION_1_0;
 
   // Vulkan instance creation
@@ -76,6 +110,7 @@ GraphicsVk::init()
 
   uint32_t layerCount = 0;
 
+  // TODO debug only?
   const char* validationLayers[] = { "VK_LAYER_LUNARG_standard_validation" };
   layerCount = 1;
 
@@ -115,10 +150,12 @@ GraphicsVk::init()
 #endif
   instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensionNames.size());
   instanceCreateInfo.ppEnabledExtensionNames = extensionNames.data();
-  VK_CHECK_RESULT(vkCreateInstance(&instanceCreateInfo, nullptr, &sInstance));
+
+  VkInstance instance = nullptr;
+  VK_CHECK_RESULT(vkCreateInstance(&instanceCreateInfo, nullptr, &instance));
 
 #if DEBUG
-  if (layersAvailable) {
+  if (instance && layersAvailable) {
     VkDebugReportCallbackCreateInfoEXT debugReportCreateInfo = {};
     debugReportCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
     debugReportCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
@@ -129,34 +166,28 @@ GraphicsVk::init()
       reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(
         vkGetInstanceProcAddr(sInstance, "vkCreateDebugReportCallbackEXT"));
     assert(vkCreateDebugReportCallbackEXT);
-    VK_CHECK_RESULT(vkCreateDebugReportCallbackEXT(sInstance, &debugReportCreateInfo, nullptr, &debugReportCallback));
+    VK_CHECK_RESULT(vkCreateDebugReportCallbackEXT(instance, &debugReportCreateInfo, nullptr, &debugReportCallback));
   }
 #endif
 
-  // get all physical devices
-  uint32_t deviceCount = 0;
-  VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, nullptr));
-  std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
-  VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, physicalDevices.data()));
-  sPhysicalDevices = physicalDevices;
-
-  logPhysicalDevices();
-
-  // select a default device
-  VkPhysicalDevice physicalDevice;
-  VkDevice device;
-  vks::VulkanDevice* vulkanDevice = nullptr;
-  physicalDevice = selectPhysicalDevice(1);
-  vulkanDevice = createDevice(physicalDevice);
-  device = vulkanDevice->logicalDevice;
-
-  return true;
+  return instance;
 }
 
 VkPhysicalDevice
 GraphicsVk::selectPhysicalDevice(size_t which)
 {
   assert(sPhysicalDevices.size() > 0);
+
+  // pick first discrete gpu or failing that, pick first gpu.
+  for (size_t i = 0; i < sPhysicalDevices.size(); ++i) {
+    VkPhysicalDeviceProperties deviceProperties;
+    vkGetPhysicalDeviceProperties(sPhysicalDevices[i], &deviceProperties);
+    if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+      which = i;
+      break;
+    }
+  }
+
   if (which >= sPhysicalDevices.size()) {
     which = 0;
   }
@@ -180,6 +211,15 @@ GraphicsVk::createDevice(VkPhysicalDevice physicalDevice)
     vks::tools::exitFatal("Could not create Vulkan device: \n" + vks::tools::errorString(res), res);
     return nullptr;
   }
+
+  VkCommandPool graphicsCommandPool = sVulkanDevice->createCommandPool(sVulkanDevice->queueFamilyIndices.graphics,
+                                                                       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+  VkQueue graphicsQueue;
+  vkGetDeviceQueue(sVulkanDevice->logicalDevice, sVulkanDevice->queueFamilyIndices.graphics, 0, &graphicsQueue);
+  sCommandPool = graphicsCommandPool;
+  sQueue = graphicsQueue;
+
+  // device, pool and queue could be grouped together and passed around
 
   return sVulkanDevice;
 }
@@ -205,6 +245,8 @@ GraphicsVk::cleanup()
     vkDestroyDebugReportCallback(sInstance, debugReportCallback, nullptr);
   }
 #endif
+
+  // THE END
   vkDestroyInstance(sInstance, nullptr);
 
   return true;
@@ -231,7 +273,7 @@ GraphicsVk::createWindowRenderTarget()
 RenderTarget*
 GraphicsVk::createImageRenderTarget(int width, int height, PixelFormat format)
 {
-  RenderTargetVk* rt = new RenderTargetVk(sVulkanDevice, width, height, format);
+  RenderTargetVk* rt = new RenderTargetVk(sVulkanDevice, sQueue, width, height, format);
   return rt;
 }
 

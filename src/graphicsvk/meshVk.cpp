@@ -17,10 +17,10 @@ MeshVk::MeshVk(vks::VulkanDevice* vulkanDevice,
 
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingMemory;
+#if 0
 
   VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, commandPool);
   VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
-
   // Copy input data to VRAM using a staging buffer
   {
     // Vertices
@@ -74,6 +74,7 @@ MeshVk::MeshVk(vks::VulkanDevice* vulkanDevice,
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingMemory, nullptr);
   }
+#endif
 }
 
 BoundingBox

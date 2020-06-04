@@ -27,6 +27,7 @@
 #include "shaders/triangle.vert.h"
 
 #include "graphics/camera.h"
+#include "graphics/mesh.h"
 #include "graphics/renderTarget.h"
 #include "graphics/scene.h"
 #include "graphics/sceneObject.h"
@@ -43,6 +44,9 @@
 void
 save(const char* imagedata, size_t rowPitch, int width, int height, bool colorSwizzle)
 {
+  if (!imagedata) {
+    return;
+  }
   const char* filename = "headless.ppm";
 
   std::ofstream file(filename, std::ios::out | std::ios::binary);
@@ -85,64 +89,11 @@ public:
   VkBuffer vertexBuffer, indexBuffer;
   VkDeviceMemory vertexMemory, indexMemory;
 
-  struct FrameBufferAttachment
-  {
-    VkImage image;
-    VkDeviceMemory memory;
-    VkImageView view;
-  };
   int32_t width, height;
   //  VkFramebuffer framebuffer;
   //  VkRenderPass renderPass;
 
   vks::Framebuffer* vulkanFramebuffer = nullptr;
-
-  uint32_t getMemoryTypeIndex(uint32_t typeBits, VkMemoryPropertyFlags properties)
-  {
-    VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
-    for (uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; i++) {
-      if ((typeBits & 1) == 1) {
-        if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-          return i;
-        }
-      }
-      typeBits >>= 1;
-    }
-    return 0;
-  }
-
-  VkResult createBuffer(VkBufferUsageFlags usageFlags,
-                        VkMemoryPropertyFlags memoryPropertyFlags,
-                        VkBuffer* buffer,
-                        VkDeviceMemory* memory,
-                        VkDeviceSize size,
-                        void* data = nullptr)
-  {
-    // Create the buffer handle
-    VkBufferCreateInfo bufferCreateInfo = vks::initializers::bufferCreateInfo(usageFlags, size);
-    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    VK_CHECK_RESULT(vkCreateBuffer(device, &bufferCreateInfo, nullptr, buffer));
-
-    // Create the memory backing up the buffer handle
-    VkMemoryRequirements memReqs;
-    VkMemoryAllocateInfo memAlloc = vks::initializers::memoryAllocateInfo();
-    vkGetBufferMemoryRequirements(device, *buffer, &memReqs);
-    memAlloc.allocationSize = memReqs.size;
-    memAlloc.memoryTypeIndex = getMemoryTypeIndex(memReqs.memoryTypeBits, memoryPropertyFlags);
-    VK_CHECK_RESULT(vkAllocateMemory(device, &memAlloc, nullptr, memory));
-
-    if (data != nullptr) {
-      void* mapped;
-      VK_CHECK_RESULT(vkMapMemory(device, *memory, 0, size, 0, &mapped));
-      memcpy(mapped, data, size);
-      vkUnmapMemory(device, *memory);
-    }
-
-    VK_CHECK_RESULT(vkBindBufferMemory(device, *buffer, *memory, 0));
-
-    return VK_SUCCESS;
-  }
 
   /*
           Submit command buffer to a queue and wait for fence until queue
@@ -396,7 +347,7 @@ public:
       vkGetImageMemoryRequirements(device, dstImage, &memRequirements);
       memAllocInfo.allocationSize = memRequirements.size;
       // Memory must be host visible to copy from
-      memAllocInfo.memoryTypeIndex = getMemoryTypeIndex(
+      memAllocInfo.memoryTypeIndex = vulkanDevice->getMemoryType(
         memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
       VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &dstImageMemory));
       VK_CHECK_RESULT(vkBindImageMemory(device, dstImage, dstImageMemory, 0));
@@ -473,6 +424,7 @@ public:
       /*
               Save host visible framebuffer image to disk (ppm format)
       */
+
       // If source is BGR (destination is always RGB) and we can't use blit
       // (which does automatic conversion), we'll have to manually swizzle color
       // components Check if source is BGR and needs swizzle
@@ -537,12 +489,25 @@ main()
   // save pixels to file
   save(reinterpret_cast<const char*>(pixels), width * 4, width, height, false);
 
-  VulkanExample* vulkanExample = new VulkanExample();
-  std::cout << "Finished. Press enter to terminate...";
-  getchar();
-  delete (vulkanExample);
+  //  VulkanExample* vulkanExample = new VulkanExample();
+  //  std::cout << "Finished. Press enter to terminate...";
+  //  getchar();
+  //  delete (vulkanExample);
 
+  std::cout << "Beginning cleanup" << std::endl;
+
+  // clean up scene geometry
+  delete mesh;
+
+  // clean up window
+  delete rendertarget;
+
+  // clean up renderer
+  delete renderer;
+
+  // clean up graphics system
   delete graphics;
 
+  std::cout << "Done!" << std::endl;
   return 0;
 }

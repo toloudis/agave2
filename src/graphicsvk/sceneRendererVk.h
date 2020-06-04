@@ -2,6 +2,8 @@
 
 #include "graphics/sceneRenderer.h"
 
+#include <vulkan/vulkan.h>
+
 namespace vks {
 struct VulkanDevice;
 }
@@ -23,4 +25,6 @@ public:
 
 private:
   vks::VulkanDevice* m_device = nullptr;
+  VkCommandPool m_commandPool = nullptr;
+  VkQueue m_queue = nullptr;
 };

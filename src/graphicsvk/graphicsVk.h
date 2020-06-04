@@ -32,7 +32,9 @@ public:
                    const uint32_t* i_Indices) override;
 
 private:
-  VkPhysicalDevice selectPhysicalDevice(size_t which);
+  VkInstance createInstance();
+
+  VkPhysicalDevice selectPhysicalDevice(size_t which = 0);
   vks::VulkanDevice* createDevice(VkPhysicalDevice physicalDevice);
   void logPhysicalDevices();
 };
