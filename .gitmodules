@@ -10,3 +10,12 @@
 [submodule "src/external/tinygltf"]
 	path = src/external/tinygltf
 	url = https://github.com/syoyo/tinygltf.git
+[submodule "src/fileformats/libtiff"]
+	path = src/fileformats/libtiff
+	url = https://gitlab.com/libtiff/libtiff.git
+[submodule "src/fileformats/libCZI"]
+	path = src/fileformats/libCZI
+	url = https://github.com/zeiss-microscopy/libCZI.git
+[submodule "src/external/spdlog"]
+	path = src/external/spdlog
+	url = https://github.com/gabime/spdlog.git

@@ -84,6 +84,8 @@ main()
   SceneObject* triangle = new SceneObject(mesh);
   scene.add(triangle);
 
+  // should I have a renderer->updateScene(scene) step first?
+
   renderer->render(rendertarget, camera, scene);
   rendertarget->swap();
   const void* pixels = rendertarget->getPixels();

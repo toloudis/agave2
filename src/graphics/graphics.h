@@ -6,6 +6,7 @@
 class Mesh;
 class RenderTarget;
 class SceneRenderer;
+class Volume;
 
 // Graphics* graphics = new GraphicsVk();
 // bool ok = graphics->init();
@@ -48,4 +49,6 @@ public:
                            const float* i_UVs,
                            uint32_t i_nIndices,
                            const uint32_t* i_Indices) = 0;
+
+  // virtual Volume* createVolume() = 0;
 };
