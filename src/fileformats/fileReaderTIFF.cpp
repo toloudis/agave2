@@ -4,18 +4,46 @@
 #include "graphics/imageXYZC.h"
 #include "graphics/volumeDimensions.h"
 
+#include "pugixml.hpp"
 #include "spdlog/spdlog.h"
-
-#include <QDomDocument>
-#include <QElapsedTimer>
-#include <QString>
-#include <QtDebug>
 
 #include <tiff.h>
 #include <tiffio.h>
 
+#include <chrono>
 #include <map>
 #include <set>
+
+bool
+startsWith(std::string const& mainStr, std::string const& toMatch)
+{
+  // std::string::find returns 0 if toMatch is found at starting
+  if (mainStr.find(toMatch) == 0)
+    return true;
+  else
+    return false;
+}
+bool
+endsWith(std::string const& mainStr, std::string const& toMatch)
+{
+  if (mainStr.length() >= toMatch.length()) {
+    return (0 == mainStr.compare(mainStr.length() - toMatch.length(), toMatch.length(), toMatch));
+  } else {
+    return false;
+  }
+}
+
+// container supports push_back
+template<class Container>
+void
+split(const std::string& str, Container& cont, char delim = ' ')
+{
+  std::stringstream ss(str);
+  std::string token;
+  while (std::getline(ss, token, delim)) {
+    cont.push_back(token);
+  }
+}
 
 static const uint32_t IN_MEMORY_BPP = 16;
 
@@ -31,7 +59,7 @@ public:
     // Loads tiff file
     m_tiff = TIFFOpen(filepath.c_str(), "r");
     if (!m_tiff) {
-      LOG_ERROR << "Failed to open TIFF: '" << filepath << "'";
+      spdlog::error("Failed to open TIFF: '{}'", filepath);
     }
   }
   ~ScopedTiffReader()
@@ -46,39 +74,16 @@ protected:
   TIFF* m_tiff;
 };
 
-uint32_t
-requireUint32Attr(QDomElement& el, const QString& attr, uint32_t defaultVal)
-{
-  QString attrval = el.attribute(attr);
-  bool ok;
-  uint32_t retval = attrval.toUInt(&ok);
-  if (!ok) {
-    retval = defaultVal;
-  }
-  return retval;
-}
-float
-requireFloatAttr(QDomElement& el, const QString& attr, float defaultVal)
-{
-  QString attrval = el.attribute(attr);
-  bool ok;
-  float retval = attrval.toFloat(&ok);
-  if (!ok) {
-    retval = defaultVal;
-  }
-  return retval;
-}
-
 bool
 readTiffDimensions(TIFF* tiff, const std::string filepath, VolumeDimensions& dims)
 {
-  char* imagedescription = nullptr;
+  char* imagedescriptionptr = nullptr;
   // metadata is in ImageDescription of first IFD in the file.
-  if (TIFFGetField(tiff, TIFFTAG_IMAGEDESCRIPTION, &imagedescription) != 1) {
-    QString msg = "Failed to read imagedescription of TIFF: '" + QString(filepath.c_str()) + "'";
-    LOG_ERROR << msg.toStdString();
+  if (TIFFGetField(tiff, TIFFTAG_IMAGEDESCRIPTION, &imagedescriptionptr) != 1) {
+    spdlog::error("Failed to read imagedescription of TIFF: '{}'", filepath);
     return false;
   }
+  std::string imagedescription(imagedescriptionptr);
 
   // Temporary variables
   uint32 width, height;
@@ -86,28 +91,24 @@ readTiffDimensions(TIFF* tiff, const std::string filepath, VolumeDimensions& dim
 
   // Read dimensions of image
   if (TIFFGetField(tiff, TIFFTAG_IMAGEWIDTH, &width) != 1) {
-    QString msg = "Failed to read width of TIFF: '" + QString(filepath.c_str()) + "'";
-    LOG_ERROR << msg.toStdString();
+    spdlog::error("Failed to read width of TIFF: '{}'", filepath);
     return false;
   }
   if (TIFFGetField(tiff, TIFFTAG_IMAGELENGTH, &height) != 1) {
-    QString msg = "Failed to read height of TIFF: '" + QString(filepath.c_str()) + "'";
-    LOG_ERROR << msg.toStdString();
+    spdlog::error("Failed to read height of TIFF: '{}'", filepath);
     return false;
   }
 
   uint32_t bpp = 0;
   if (TIFFGetField(tiff, TIFFTAG_BITSPERSAMPLE, &bpp) != 1) {
-    QString msg = "Failed to read bpp of TIFF: '" + QString(filepath.c_str()) + "'";
-    LOG_ERROR << msg.toStdString();
+    spdlog::error("Failed to read bpp of TIFF: '{}'", filepath);
     return false;
   }
 
   uint16_t sampleFormat = SAMPLEFORMAT_UINT;
   if (TIFFGetField(tiff, TIFFTAG_SAMPLEFORMAT, &sampleFormat) != 1) {
     // just warn here.  We are not yet using sampleFormat!
-    QString msg = "Failed to read sampleformat of TIFF: '" + QString(filepath.c_str()) + "'";
-    LOG_WARNING << msg.toStdString();
+    spdlog::warn("Failed to read sampleformat of TIFF: '{}'", filepath);
   }
 
   uint32_t sizeT = 1;
@@ -119,120 +120,114 @@ readTiffDimensions(TIFF* tiff, const std::string filepath, VolumeDimensions& dim
   float physicalSizeY = 1.0f;
   float physicalSizeZ = 1.0f;
   std::vector<std::string> channelNames;
-  QString dimensionOrder = "XYCZT";
-
-  // convert to QString for convenience functions
-  QString imagedescriptionQString(imagedescription);
+  std::string dimensionOrder = "XYCZT";
 
   // check for plain tiff with ImageJ imagedescription:
-  if (imagedescriptionQString.startsWith("ImageJ=")) {
+  if (startsWith(imagedescription, "ImageJ=")) {
     // "ImageJ=\nhyperstack=true\nimages=7900\nchannels=1\nslices=50\nframes=158"
     // "ImageJ=1.52i\nimages=126\nchannels=2\nslices=63\nhyperstack=true\nmode=composite\nunit=
     //      micron\nfinterval=299.2315368652344\nspacing=0.2245383462882669\nloop=false\nmin=9768.0\nmax=
     //        14591.0\n"
-    QStringList sl = imagedescriptionQString.split('\n');
+    std::vector<std::string> sl;
+    split(imagedescription, sl, '\n');
     // split each string into name/value pairs,
     // then look up as a map.
-    QMap<QString, QString> imagejmetadata;
+    std::map<std::string, std::string> imagejmetadata;
     for (int i = 0; i < sl.size(); ++i) {
-      QStringList namevalue = sl.at(i).split('=');
+      std::vector<std::string> namevalue;
+      split(sl[i], namevalue, '=');
       if (namevalue.size() == 2) {
-        imagejmetadata.insert(namevalue[0], namevalue[1]);
+        imagejmetadata[namevalue[0]] = namevalue[1];
       } else if (namevalue.size() == 1) {
-        imagejmetadata.insert(namevalue[0], "");
+        imagejmetadata[namevalue[0]] = "";
       } else {
-        QString msg = "Unexpected name/value pair in TIFF ImageJ metadata: " + sl.at(i);
-        LOG_ERROR << msg.toStdString();
+        spdlog::error("Unexpected name/value pair in TIFF ImageJ metadata: {}", sl[i]);
         return false;
       }
     }
 
-    if (imagejmetadata.contains("channels")) {
-      QString value = imagejmetadata.value("channels");
-      sizeC = value.toInt();
+    if (imagejmetadata.find("channels") != imagejmetadata.end()) {
+      std::string value = imagejmetadata["channels"];
+      sizeC = std::stoi(value);
     } else {
-      QString msg = "Failed to read number of channels of ImageJ TIFF: '" + QString(filepath.c_str()) + "'";
-      LOG_WARNING << msg.toStdString();
+      spdlog::warn("Failed to read number of channels of ImageJ TIFF: '{}'", filepath);
     }
 
-    if (imagejmetadata.contains("slices")) {
-      QString value = imagejmetadata.value("slices");
-      sizeZ = value.toInt();
+    if (imagejmetadata.find("slices") != imagejmetadata.end()) {
+      std::string value = imagejmetadata["slices"];
+      sizeZ = std::stoi(value);
     } else {
-      QString msg = "Failed to read number of slices of ImageJ TIFF: '" + QString(filepath.c_str()) + "'";
-      LOG_WARNING << msg.toStdString();
+      spdlog::warn("Failed to read number of slices of ImageJ TIFF: '{}'", filepath);
     }
 
-    if (imagejmetadata.contains("frames")) {
-      QString value = imagejmetadata.value("frames");
-      sizeT = value.toInt();
+    if (imagejmetadata.find("frames") != imagejmetadata.end()) {
+      std::string value = imagejmetadata["frames"];
+      sizeT = std::stoi(value);
     } else {
-      QString msg = "Failed to read number of frames of ImageJ TIFF: '" + QString(filepath.c_str()) + "'";
-      LOG_WARNING << msg.toStdString();
+      spdlog::warn("Failed to read number of frames of ImageJ TIFF: '{}'", filepath);
     }
 
-    if (imagejmetadata.contains("spacing")) {
-      QString value = imagejmetadata.value("spacing");
-      bool ok;
-      physicalSizeZ = value.toFloat(&ok);
-      if (!ok) {
-        QString msg = "Failed to read spacing of ImageJ TIFF: '" + QString(filepath.c_str()) + "'";
-        LOG_WARNING << msg.toStdString();
-        physicalSizeZ = 1.0f;
-      } else {
+    if (imagejmetadata.find("spacing") != imagejmetadata.end()) {
+      std::string value = imagejmetadata["spacing"];
+      try {
+        physicalSizeZ = std::stof(value);
         if (physicalSizeZ < 0.0f) {
           physicalSizeZ = -physicalSizeZ;
         }
         physicalSizeX = physicalSizeZ;
         physicalSizeY = physicalSizeZ;
+      } catch (...) {
+        spdlog::warn("Failed to read spacing of ImageJ TIFF: '{}'", filepath);
+        physicalSizeZ = 1.0f;
       }
     }
 
     for (uint32_t i = 0; i < sizeC; ++i) {
-      channelNames.push_back(QString::number(i).toStdString());
+      channelNames.push_back(std::to_string(i));
     }
-  } else if (imagedescriptionQString.startsWith("{\"shape\":")) {
+  } else if (startsWith(imagedescription, "{\"shape\":")) {
     // expect a 4d shape array of C,Z,Y,X or 5d T,C,Z,Y,X
-    int firstBracket = imagedescriptionQString.indexOf('[');
-    int lastBracket = imagedescriptionQString.lastIndexOf(']');
-    QString shape = imagedescriptionQString.mid(firstBracket + 1, lastBracket - firstBracket - 1);
-    LOG_INFO << shape.toStdString();
-    QStringList shapelist = shape.split(',');
+    int firstBracket = imagedescription.find('[');
+    int lastBracket = imagedescription.rfind(']');
+    std::string shape = imagedescription.substr(firstBracket + 1, lastBracket - firstBracket - 1);
+    spdlog::info(shape);
+    std::vector<std::string> shapelist;
+    split(shape, shapelist, ',');
     if (shapelist.size() != 4 || shapelist.size() != 5) {
-      QString msg = "Expected shape to be 4D or 5D TIFF: '" + QString(filepath.c_str()) + "'";
-      LOG_ERROR << msg.toStdString();
+      spdlog::error("Expected shape to be 4D or 5D TIFF: '{}'", filepath);
       return false;
     }
     dimensionOrder = "XYZCT";
     bool hasT = (shapelist.size() == 5);
     int shapeIndex = 0;
     if (hasT) {
-      sizeT = shapelist[shapeIndex++].toInt();
+      sizeT = std::stoi(shapelist[shapeIndex++]);
     }
-    sizeC = shapelist[shapeIndex++].toInt();
-    sizeZ = shapelist[shapeIndex++].toInt();
-    sizeY = shapelist[shapeIndex++].toInt();
-    sizeX = shapelist[shapeIndex++].toInt();
+    sizeC = std::stoi(shapelist[shapeIndex++]);
+    sizeZ = std::stoi(shapelist[shapeIndex++]);
+    sizeY = std::stoi(shapelist[shapeIndex++]);
+    sizeX = std::stoi(shapelist[shapeIndex++]);
     for (uint32_t i = 0; i < sizeC; ++i) {
-      channelNames.push_back(QString::number(i).toStdString());
+      channelNames.push_back(std::to_string(i));
     }
 
-  } else if (imagedescriptionQString.startsWith("<?xml version") && imagedescriptionQString.endsWith("OME>")) {
+  } else if (startsWith(imagedescription, "<?xml version") && endsWith(imagedescription, "OME>")) {
     // convert c to xml doc.  if this fails then we don't have an ome tif.
-    QDomDocument omexml;
-    bool ok = omexml.setContent(imagedescriptionQString);
-    if (!ok) {
-      QString msg = "Bad ome xml content";
-      LOG_ERROR << msg.toStdString();
+    pugi::xml_document omexml;
+    pugi::xml_parse_result result = omexml.load_string(imagedescription.c_str());
+    if (!result) {
+      spdlog::error("XML parse error:");
+      spdlog::error("Error description: {}", result.description());
+      spdlog::error("Error offset: {} {error at [...{}]", result.offset, (imagedescription.c_str() + result.offset));
+      spdlog::error("Bad ome xml content");
       return false;
     }
 
     // extract some necessary info from the xml:
     // use the FIRST Pixels element found.
-    QDomElement pixelsEl = omexml.elementsByTagName("Pixels").at(0).toElement();
-    if (pixelsEl.isNull()) {
-      QString msg = "No <Pixels> element in ome xml";
-      LOG_ERROR << msg.toStdString();
+    pugi::xml_node pixelsEl = omexml.child("Pixels");
+    if (pixelsEl) {
+      spdlog::error("No <Pixels> element in ome xml");
       return false;
     }
 
@@ -241,41 +236,42 @@ readTiffDimensions(TIFF* tiff, const std::string filepath, VolumeDimensions& dim
                                                         { "int8", 8 },   { "int16", 16 },  { "int32", 32 },
                                                         { "float", 32 }, { "double", 64 } };
 
-    QString pixelType = pixelsEl.attribute("Type", "uint16").toLower();
-    LOG_INFO << "pixel type: " << pixelType.toStdString();
-    bpp = mapPixelTypeBPP[pixelType.toStdString()];
+    std::string pixelType = pixelsEl.attribute("Type").as_string("uint16");
+    std::transform(
+      pixelType.begin(), pixelType.end(), pixelType.begin(), [](unsigned char c) { return std::tolower(c); });
+    spdlog::info("pixel type: {}", pixelType);
+    bpp = mapPixelTypeBPP[pixelType];
     if (bpp != 16 && bpp != 8) {
-      LOG_ERROR << "Image must be 8 or 16-bit integer typed";
+      spdlog::error("Image must be 8 or 16-bit integer typed");
       return false;
     }
-    sizeX = requireUint32Attr(pixelsEl, "SizeX", 0);
-    sizeY = requireUint32Attr(pixelsEl, "SizeY", 0);
-    sizeZ = requireUint32Attr(pixelsEl, "SizeZ", 0);
-    sizeC = requireUint32Attr(pixelsEl, "SizeC", 0);
-    sizeT = requireUint32Attr(pixelsEl, "SizeT", 0);
+    sizeX = pixelsEl.attribute("SizeX").as_int(0);
+    sizeY = pixelsEl.attribute("SizeY").as_int(0);
+    sizeZ = pixelsEl.attribute("SizeZ").as_int(0);
+    sizeC = pixelsEl.attribute("SizeC").as_int(0);
+    sizeT = pixelsEl.attribute("SizeT").as_int(0);
     // one of : "XYZCT", "XYZTC","XYCTZ","XYCZT","XYTCZ","XYTZC"
-    dimensionOrder = pixelsEl.attribute("DimensionOrder", dimensionOrder);
-    physicalSizeX = requireFloatAttr(pixelsEl, "PhysicalSizeX", 1.0f);
-    physicalSizeY = requireFloatAttr(pixelsEl, "PhysicalSizeY", 1.0f);
-    physicalSizeZ = requireFloatAttr(pixelsEl, "PhysicalSizeZ", 1.0f);
-    QString physicalSizeXunit = pixelsEl.attribute("PhysicalSizeXUnit", "");
-    QString physicalSizeYunit = pixelsEl.attribute("PhysicalSizeYUnit", "");
-    QString physicalSizeZunit = pixelsEl.attribute("PhysicalSizeZUnit", "");
+    dimensionOrder = pixelsEl.attribute("DimensionOrder").as_string(dimensionOrder.c_str());
+    physicalSizeX = pixelsEl.attribute("PhysicalSizeX").as_float(1.0f);
+    physicalSizeY = pixelsEl.attribute("PhysicalSizeY").as_float(1.0f);
+    physicalSizeZ = pixelsEl.attribute("PhysicalSizeZ").as_float(1.0f);
+    std::string physicalSizeXunit = pixelsEl.attribute("PhysicalSizeXUnit").as_string("");
+    std::string physicalSizeYunit = pixelsEl.attribute("PhysicalSizeYUnit").as_string("");
+    std::string physicalSizeZunit = pixelsEl.attribute("PhysicalSizeZUnit").as_string("");
 
     // find channel names
-    QDomNodeList channels = pixelsEl.elementsByTagName("Channel");
-    for (int i = 0; i < channels.length(); ++i) {
-      QDomNode dn = channels.at(i);
-      QDomElement chel = dn.toElement();
-      QString chid = chel.attribute("ID");
-      QString chname = chel.attribute("Name");
-      if (!chname.isEmpty()) {
-        channelNames.push_back(chname.toStdString());
-      } else if (!chid.isEmpty()) {
-        channelNames.push_back(chid.toStdString());
+    int i = 0;
+    for (pugi::xml_node chel : pixelsEl.children("Channel")) {
+      std::string chid = chel.attribute("ID").as_string();
+      std::string chname = chel.attribute("Name").as_string();
+      if (!chname.empty()) {
+        channelNames.push_back(chname);
+      } else if (!chid.empty()) {
+        channelNames.push_back(chid);
       } else {
-        channelNames.push_back(QString::number(i).toStdString());
+        channelNames.push_back(std::to_string(i));
       }
+      ++i;
     }
   } else {
     // unrecognized string / no metadata.
@@ -303,7 +299,7 @@ readTiffDimensions(TIFF* tiff, const std::string filepath, VolumeDimensions& dim
   dims.sizeZ = sizeZ;
   dims.sizeC = sizeC;
   dims.sizeT = sizeT;
-  dims.dimensionOrder = dimensionOrder.toStdString();
+  dims.dimensionOrder = dimensionOrder;
   dims.physicalSizeX = physicalSizeX;
   dims.physicalSizeY = physicalSizeY;
   dims.physicalSizeZ = physicalSizeZ;
@@ -321,7 +317,7 @@ readTiffPlane(TIFF* tiff, int planeIndex, const VolumeDimensions& dims, uint8_t*
 {
   int setdirok = TIFFSetDirectory(tiff, planeIndex);
   if (setdirok == 0) {
-    LOG_ERROR << "Bad tiff directory specified: " << (planeIndex);
+    spdlog::error("Bad tiff directory specified: {}", planeIndex);
     return false;
   }
 
@@ -333,7 +329,7 @@ readTiffPlane(TIFF* tiff, int planeIndex, const VolumeDimensions& dims, uint8_t*
     tsize_t tilesize = TIFFTileSize(tiff);
     uint32 ntiles = TIFFNumberOfTiles(tiff);
     if (ntiles != 1) {
-      LOG_ERROR << "Reader doesn't support more than 1 tile per plane";
+      spdlog::error("Reader doesn't support more than 1 tile per plane");
       return false;
     }
     // assuming ntiles == 1 for all IFDs
@@ -343,7 +339,7 @@ readTiffPlane(TIFF* tiff, int planeIndex, const VolumeDimensions& dims, uint8_t*
 
     numBytesRead = TIFFReadEncodedTile(tiff, 0, buf, tilesize);
     if (numBytesRead < 0) {
-      LOG_ERROR << "Error reading tiff tile";
+      spdlog::error("Error reading tiff tile");
       _TIFFfree(buf);
       return false;
     }
@@ -353,7 +349,7 @@ readTiffPlane(TIFF* tiff, int planeIndex, const VolumeDimensions& dims, uint8_t*
     } else {
       // convert pixels
       if (dims.bitsPerPixel != 8) {
-        LOG_ERROR << "Unexpected tiff pixel size " << dims.bitsPerPixel << " bits";
+        spdlog::error("Unexpected tiff pixel size {} bits", dims.bitsPerPixel);
         _TIFFfree(buf);
         return false;
       }
@@ -379,12 +375,12 @@ readTiffPlane(TIFF* tiff, int planeIndex, const VolumeDimensions& dims, uint8_t*
     tdata_t buf = _TIFFmalloc(striplength);
 
     uint32 nstrips = TIFFNumberOfStrips(tiff);
-    // LOG_DEBUG << nstrips;     // num y rows
-    // LOG_DEBUG << striplength; // x width * rows per strip
+    // spdlog::debug(nstrips;     // num y rows
+    // spdlog::debug(striplength; // x width * rows per strip
     for (tstrip_t strip = 0; strip < nstrips; strip++) {
       numBytesRead = TIFFReadEncodedStrip(tiff, strip, buf, striplength);
       if (numBytesRead < 0) {
-        LOG_ERROR << "Error reading tiff strip";
+        spdlog::error("Error reading tiff strip");
         _TIFFfree(buf);
         return false;
       }
@@ -396,7 +392,7 @@ readTiffPlane(TIFF* tiff, int planeIndex, const VolumeDimensions& dims, uint8_t*
         dataPtr += numBytesRead;
       } else {
         if (dims.bitsPerPixel != 8) {
-          LOG_ERROR << "Unexpected tiff pixel size " << dims.bitsPerPixel << " bits";
+          spdlog::error("Unexpected tiff pixel size {} bits", dims.bitsPerPixel);
           _TIFFfree(buf);
           return false;
         }
@@ -440,11 +436,7 @@ FileReaderTIFF::loadOMETiff(const std::string& filepath, VolumeDimensions* outDi
 {
   std::shared_ptr<ImageXYZC> emptyimage;
 
-  QElapsedTimer twhole;
-  twhole.start();
-
-  QElapsedTimer timer;
-  timer.start();
+  auto tStart = std::chrono::high_resolution_clock::now();
 
   // Loads tiff file
   ScopedTiffReader tiffreader(filepath);
@@ -460,29 +452,29 @@ FileReaderTIFF::loadOMETiff(const std::string& filepath, VolumeDimensions* outDi
   }
 
   if (scene > 0) {
-    LOG_WARNING << "Multiscene tiff not supported yet. Using scene 0";
+    spdlog::warn("Multiscene tiff not supported yet. Using scene 0");
     scene = 0;
   }
   if (time > (int32_t)(dims.sizeT - 1)) {
-    LOG_ERROR << "Time " << time << " exceeds time samples in file: " << dims.sizeT;
+    spdlog::error("Time {} exceeds time samples in file: {}", time, dims.sizeT);
     return emptyimage;
   }
 
-  LOG_DEBUG << "Reading " << (TIFFIsTiled(tiff) ? "tiled" : "stripped") << " tiff...";
+  spdlog::debug("Reading {} tiff...", (TIFFIsTiled(tiff) ? "tiled" : "stripped"));
 
   uint32_t rowsPerStrip = 0;
   if (TIFFGetField(tiff, TIFFTAG_ROWSPERSTRIP, &rowsPerStrip)) {
-    LOG_DEBUG << "ROWSPERSTRIP: " << rowsPerStrip;
+    spdlog::debug("ROWSPERSTRIP: {}", rowsPerStrip);
     uint32_t StripsPerImage = ((dims.sizeY + rowsPerStrip - 1) / rowsPerStrip);
-    LOG_DEBUG << "Strips per image: " << StripsPerImage;
+    spdlog::debug("Strips per image: {}", StripsPerImage);
   }
   uint32_t samplesPerPixel = 0;
   if (TIFFGetField(tiff, TIFFTAG_SAMPLESPERPIXEL, &samplesPerPixel)) {
-    LOG_DEBUG << "SamplesPerPixel: " << samplesPerPixel;
+    spdlog::debug("SamplesPerPixel: {}", samplesPerPixel);
   }
   uint32_t planarConfig = 0;
   if (TIFFGetField(tiff, TIFFTAG_PLANARCONFIG, &planarConfig)) {
-    LOG_DEBUG << "PlanarConfig: " << (planarConfig == 1 ? "PLANARCONFIG_CONTIG" : "PLANARCONFIG_SEPARATE");
+    spdlog::debug("PlanarConfig: {}", (planarConfig == 1 ? "PLANARCONFIG_CONTIG" : "PLANARCONFIG_SEPARATE"));
   }
 
   size_t planesize_bytes = dims.sizeX * dims.sizeY * (IN_MEMORY_BPP / 8);
@@ -505,11 +497,13 @@ FileReaderTIFF::loadOMETiff(const std::string& filepath, VolumeDimensions* outDi
     }
   }
 
-  LOG_DEBUG << "TIFF loaded in " << timer.elapsed() << "ms";
+  auto tEnd = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = tEnd - tStart;
+  spdlog::debug("TIFF loaded in {} ms", elapsed.count() * 1000.0);
+
+  auto tStartImage = std::chrono::high_resolution_clock::now();
 
   // TODO: convert data to uint16_t pixels if not already.
-
-  timer.start();
   // we can release the smartPtr because ImageXYZC will now own the raw data memory
   ImageXYZC* im = new ImageXYZC(dims.sizeX,
                                 dims.sizeY,
@@ -520,11 +514,14 @@ FileReaderTIFF::loadOMETiff(const std::string& filepath, VolumeDimensions* outDi
                                 dims.physicalSizeX,
                                 dims.physicalSizeY,
                                 dims.physicalSizeZ);
-  LOG_DEBUG << "ImageXYZC prepared in " << timer.elapsed() << "ms";
-
   im->setChannelNames(dims.channelNames);
 
-  LOG_DEBUG << "Loaded " << filepath << " in " << twhole.elapsed() << "ms";
+  tEnd = std::chrono::high_resolution_clock::now();
+  elapsed = tEnd - tStartImage;
+  spdlog::debug("ImageXYZC prepared in {} ms", elapsed.count() * 1000.0);
+
+  elapsed = tEnd - tStart;
+  spdlog::debug("Loaded {} in {} ms", filepath, elapsed.count() * 1000.0);
 
   std::shared_ptr<ImageXYZC> sharedImage(im);
   if (outDims != nullptr) {

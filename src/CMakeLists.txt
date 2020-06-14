@@ -3,6 +3,7 @@
 include_directories(
     external/glm
     external/KTX-Software
+    external/pugixml-1.10/src
     external/spdlog/include
     external/stb
     external/tinygltf

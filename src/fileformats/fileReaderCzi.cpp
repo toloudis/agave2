@@ -4,15 +4,14 @@
 #include "graphics/imageXYZC.h"
 #include "graphics/volumeDimensions.h"
 
+#include "pugixml.hpp"
 #include "spdlog/spdlog.h"
 
 #include <libCZI/Src/libCZI/libCZI.h>
 
-#include <QDomDocument>
-#include <QElapsedTimer>
-
 #include <boost/filesystem.hpp>
 
+#include <chrono>
 #include <map>
 #include <set>
 
@@ -63,28 +62,6 @@ getSceneYXSize(libCZI::SubBlockStatistics& statistics, int sceneIndex = 0)
   return statistics.boundingBoxLayer0Only;
 }
 
-float
-requireFloatValue(QDomElement& el, float defaultVal)
-{
-  QString val = el.text();
-  bool ok;
-  float retval = val.toFloat(&ok);
-  if (!ok) {
-    retval = defaultVal;
-  }
-  return retval;
-}
-
-QDomElement
-firstChild(QDomElement el, QString tag)
-{
-  QDomElement child = el.elementsByTagName(tag).at(0).toElement();
-  if (child.isNull()) {
-    LOG_ERROR << "No " << tag.toStdString() << "element in xml";
-  }
-  return child;
-}
-
 bool
 readCziDimensions(const std::shared_ptr<libCZI::ICZIReader>& reader,
                   const std::string filepath,
@@ -93,7 +70,7 @@ readCziDimensions(const std::shared_ptr<libCZI::ICZIReader>& reader,
 {
   // check for mosaic.  we can't (won't) handle those right now.
   if (statistics.maxMindex > 0) {
-    LOG_ERROR << "CZI file is mosaic; mosaic reading not yet implemented";
+    spdlog::error("CZI file is mosaic; mosaic reading not yet implemented");
     return false;
   }
 
@@ -131,50 +108,48 @@ readCziDimensions(const std::shared_ptr<libCZI::ICZIReader>& reader,
   dims.sizeY = planebox.h;
 
   std::string xml = md->GetXml();
-  // convert to QString for convenience functions
-  QString qxmlstr = QString::fromStdString(xml);
-  QDomDocument czixml;
-  bool ok = czixml.setContent(qxmlstr);
-  if (!ok) {
-    LOG_ERROR << "Bad CZI xml metadata content";
+  // parse the xml
+  pugi::xml_document czixml;
+  pugi::xml_parse_result result = czixml.load_string(xml.c_str());
+  if (!result) {
+    spdlog::error("XML parse error:");
+    spdlog::error("Error description: {}", result.description());
+    spdlog::error("Error offset: {} {error at [...{}]", result.offset, (xml.c_str() + result.offset));
+    spdlog::error("Bad CZI xml metadata content");
     return false;
   }
 
-  QDomElement metadataEl = czixml.elementsByTagName("Metadata").at(0).toElement();
-  if (metadataEl.isNull()) {
-    LOG_ERROR << "No Metadata element in czi xml";
+  pugi::xml_node metadataEl = czixml.child("Metadata");
+  if (!metadataEl) {
+    spdlog::error("No Metadata element in czi xml");
     return false;
   }
-  QDomElement informationEl = firstChild(metadataEl, "Information");
-  if (informationEl.isNull()) {
+  pugi::xml_node informationEl = metadataEl.child("Information");
+  if (!informationEl) {
     return false;
   }
-  QDomElement imageEl = firstChild(informationEl, "Image");
-  if (imageEl.isNull()) {
+  pugi::xml_node imageEl = informationEl.child("Image");
+  if (!imageEl) {
     return false;
   }
-  QDomElement dimensionsEl = firstChild(imageEl, "Dimensions");
-  if (dimensionsEl.isNull()) {
+  pugi::xml_node dimensionsEl = imageEl.child("Dimensions");
+  if (!dimensionsEl) {
     return false;
   }
-  QDomElement channelsEl = firstChild(dimensionsEl, "Channels");
-  if (channelsEl.isNull()) {
+  pugi::xml_node channelsEl = dimensionsEl.child("Channels");
+  if (!channelsEl) {
     return false;
   }
-  QDomNodeList channelEls = channelsEl.elementsByTagName("Channel");
   std::vector<std::string> channelNames;
-  for (int i = 0; i < channelEls.count(); ++i) {
-    QDomNode node = channelEls.at(i);
-    if (node.isElement()) {
-      QDomElement el = node.toElement();
-      channelNames.push_back(el.attribute("Name").toStdString());
-    }
+  for (pugi::xml_node channelEl = channelsEl.child("Channel"); channelEl;
+       channelEl = channelEl.next_sibling("Channel")) {
+    channelNames.push_back(channelEl.attribute("Name").value());
   }
 
   dims.channelNames = channelNames;
 
   libCZI::SubBlockInfo info;
-  ok = reader->TryGetSubBlockInfoOfArbitrarySubBlockInChannel(0, info);
+  bool ok = reader->TryGetSubBlockInfoOfArbitrarySubBlockInChannel(0, info);
   if (ok) {
     switch (info.pixelType) {
       case libCZI::PixelType::Gray8:
@@ -273,11 +248,11 @@ FileReaderCzi::loadDimensionsCzi(const std::string& filepath, int32_t scene)
     return dims;
 
   } catch (std::exception& e) {
-    LOG_ERROR << e.what();
-    LOG_ERROR << "Failed to read " << filepath;
+    spdlog::error(e.what());
+    spdlog::error("Failed to read {}", filepath);
     return VolumeDimensions();
   } catch (...) {
-    LOG_ERROR << "Failed to read " << filepath;
+    spdlog::error("Failed to read {}", filepath);
     return VolumeDimensions();
   }
 }
@@ -287,11 +262,7 @@ FileReaderCzi::loadCzi(const std::string& filepath, VolumeDimensions* outDims, i
 {
   std::shared_ptr<ImageXYZC> emptyimage;
 
-  QElapsedTimer twhole;
-  twhole.start();
-
-  QElapsedTimer timer;
-  timer.start();
+  auto tStart = std::chrono::high_resolution_clock::now();
 
   try {
     ScopedCziReader scopedReader(filepath);
@@ -314,11 +285,11 @@ FileReaderCzi::loadCzi(const std::string& filepath, VolumeDimensions* outDims, i
     bool hasS = statistics.dimBounds.TryGetInterval(libCZI::DimensionIndex::S, &startS, &sizeS);
 
     if (!hasZ) {
-      LOG_ERROR << "Agave can only read zstack volume data";
+      spdlog::error("Agave can only read zstack volume data");
       return emptyimage;
     }
     if (dims.sizeC != sizeC || !hasC) {
-      LOG_ERROR << "Inconsistent Channel count in czi file";
+      spdlog::error("Inconsistent Channel count in czi file");
       return emptyimage;
     }
 
@@ -355,11 +326,13 @@ FileReaderCzi::loadCzi(const std::string& filepath, VolumeDimensions* outDims, i
       }
     }
 
-    LOG_DEBUG << "CZI loaded in " << timer.elapsed() << "ms";
+    auto tEnd = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = tEnd - tStart;
+    spdlog::debug("CZI loaded in {} ms", elapsed.count() * 1000.0);
+
+    auto tStartImage = std::chrono::high_resolution_clock::now();
 
     // TODO: convert data to uint16_t pixels if not already.
-
-    timer.start();
     // we can release the smartPtr because ImageXYZC will now own the raw data memory
     ImageXYZC* im = new ImageXYZC(dims.sizeX,
                                   dims.sizeY,
@@ -370,11 +343,14 @@ FileReaderCzi::loadCzi(const std::string& filepath, VolumeDimensions* outDims, i
                                   dims.physicalSizeX,
                                   dims.physicalSizeY,
                                   dims.physicalSizeZ);
-    LOG_DEBUG << "ImageXYZC prepared in " << timer.elapsed() << "ms";
-
     im->setChannelNames(dims.channelNames);
 
-    LOG_DEBUG << "Loaded " << filepath << " in " << twhole.elapsed() << "ms";
+    tEnd = std::chrono::high_resolution_clock::now();
+    elapsed = tEnd - tStartImage;
+    spdlog::debug("ImageXYZC prepared in {} ms", elapsed.count() * 1000.0);
+
+    elapsed = tEnd - tStart;
+    spdlog::debug("Loaded {} in {} ms", filepath, elapsed.count() * 1000.0);
 
     std::shared_ptr<ImageXYZC> sharedImage(im);
     if (outDims != nullptr) {
@@ -383,11 +359,11 @@ FileReaderCzi::loadCzi(const std::string& filepath, VolumeDimensions* outDims, i
     return sharedImage;
 
   } catch (std::exception& e) {
-    LOG_ERROR << e.what();
-    LOG_ERROR << "Failed to read " << filepath;
+    spdlog::error(e.what());
+    spdlog::error("Failed to read {}", filepath);
     return emptyimage;
   } catch (...) {
-    LOG_ERROR << "Failed to read " << filepath;
+    spdlog::error("Failed to read {}", filepath);
     return emptyimage;
   }
 }

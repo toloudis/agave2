@@ -10,7 +10,7 @@ target_sources(agave2app PRIVATE
 )
 
 target_link_libraries(agave2app 
-# TODO    fileformats
+    fileformats
     graphics
     graphicsvk
 )

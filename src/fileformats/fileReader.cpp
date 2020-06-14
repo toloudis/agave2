@@ -8,6 +8,7 @@
 
 #include <boost/filesystem.hpp>
 
+#include <chrono>
 #include <map>
 
 std::map<std::string, std::shared_ptr<ImageXYZC>> FileReader::sPreloadedImageCache;
@@ -92,13 +93,15 @@ FileReader::loadFromArray_4D(uint8_t* dataArray,
   // product of all shape elements must equal number of elements in dataArray
   // dims must either be empty or must be of same length as shape, and end in (Y, X), and start with CZ or ZC or Z ?
 
-  QElapsedTimer timer;
-  timer.start();
+  auto startTime = std::chrono::high_resolution_clock::now();
 
   // note that im will take ownership of dataArray
   ImageXYZC* im =
     new ImageXYZC(sizeX, sizeY, sizeZ, sizeC, uint32_t(bpp), dataArray, physicalSizeX, physicalSizeY, physicalSizeZ);
-  LOG_DEBUG << "ImageXYZC prepared in " << timer.elapsed() << "ms";
+
+  auto endTime = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> elapsed = endTime - startTime;
+  spdlog::debug("ImageXYZC prepared in {} ms", elapsed.count() * 1000.0);
 
   im->setChannelNames(channelNames);
 

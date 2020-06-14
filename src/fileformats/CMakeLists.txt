@@ -33,6 +33,7 @@ message(STATUS "libtiff: ${tiff}")
 
 target_link_libraries(fileformats
 	${CMAKE_DL_LIBS}
+	pugixml
 	tiff
 	libCZIStatic
 	JxrDecodeStatic # libCZI depends on it

@@ -30,3 +30,6 @@ target_include_directories(ktx PUBLIC ${KTX_INCLUDE})
 set_property(TARGET ktx PROPERTY FOLDER "external")
 
 add_subdirectory(spdlog)
+
+set(BUILD_TESTS OFF)
+add_subdirectory(pugixml-1.10)
