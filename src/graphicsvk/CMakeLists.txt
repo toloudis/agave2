@@ -1,3 +1,5 @@
+find_package(Vulkan REQUIRED)
+
 add_subdirectory(shaders)
 
 spirv_shaders(SHADER_HEADERS

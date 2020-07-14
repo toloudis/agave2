@@ -62,14 +62,16 @@ SceneRendererVk::render(RenderTarget* target, const Camera& camera, const Scene&
 
     VK_CHECK_RESULT(vkBeginCommandBuffer(commandBuffer, &cmdBufInfo));
 
+    // one per attachment
     VkClearValue clearValues[2];
-    clearValues[0].color = { { 0.0f, 0.0f, 0.2f, 1.0f } };
+    clearValues[0].color = { { 1.0f, 0.0f, 0.0f, 1.0f } };
     clearValues[1].depthStencil = { 1.0f, 0 };
 
     VkRenderPassBeginInfo renderPassBeginInfo = {};
     renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassBeginInfo.renderArea.extent.width = target->getWidth();
     renderPassBeginInfo.renderArea.extent.height = target->getHeight();
+    // one per attachment
     renderPassBeginInfo.clearValueCount = 2;
     renderPassBeginInfo.pClearValues = clearValues;
     renderPassBeginInfo.renderPass = renderTarget->fb()->renderPass;

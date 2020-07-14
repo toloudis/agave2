@@ -4,10 +4,14 @@
 #include "renderTargetVk.h"
 #include "sceneRendererVk.h"
 
+#include "VulkanDebug.h"
 #include "VulkanDevice.hpp"
 #include "VulkanFrameBuffer.hpp"
 #include "VulkanTools.h"
 #include <vulkan/vulkan.h>
+
+static bool g_validation = true;
+static std::vector<const char*> enabledInstanceExtensions;
 
 static VkInstance sInstance = nullptr;
 static std::vector<VkPhysicalDevice> sPhysicalDevices;
@@ -18,25 +22,9 @@ static VkQueue sQueue = nullptr;
 
 static std::vector<VkShaderModule> sShaderModules;
 
-static VkDebugReportCallbackEXT debugReportCallback{};
-
 #define DEBUG (!NDEBUG)
 
 #define LOG(...) printf(__VA_ARGS__)
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL
-debugMessageCallback(VkDebugReportFlagsEXT flags,
-                     VkDebugReportObjectTypeEXT objectType,
-                     uint64_t object,
-                     size_t location,
-                     int32_t messageCode,
-                     const char* pLayerPrefix,
-                     const char* pMessage,
-                     void* pUserData)
-{
-  LOG("[VALIDATION]: %s - %s\n", pLayerPrefix, pMessage);
-  return VK_FALSE;
-}
 
 void
 GraphicsVk::logPhysicalDevices()
@@ -64,6 +52,15 @@ GraphicsVk::init()
 
   sInstance = createInstance();
 
+  // If requested, we enable the default validation layers for debugging
+  if (g_validation) {
+    // The report flags determine what type of messages for the layers will be displayed
+    // For validating (debugging) an appplication the error and warning bits should suffice
+    VkDebugReportFlagsEXT debugReportFlags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+    // Additional flags include performance info, loader and layer debug messages, etc.
+    vks::debug::setupDebugging(sInstance, debugReportFlags, VK_NULL_HANDLE);
+  }
+
   // get all physical devices
   uint32_t deviceCount = 0;
   VK_CHECK_RESULT(vkEnumeratePhysicalDevices(sInstance, &deviceCount, nullptr));
@@ -83,6 +80,10 @@ GraphicsVk::init()
   physicalDevice = selectPhysicalDevice();
   vulkanDevice = createDevice(physicalDevice);
   device = vulkanDevice->logicalDevice;
+
+  if (vulkanDevice->enableDebugMarkers) {
+    vks::debugmarker::setup(device);
+  }
 
   return true;
 }
@@ -104,71 +105,72 @@ GraphicsVk::createInstance()
 
   // Vulkan instance creation
 
-  VkInstanceCreateInfo instanceCreateInfo = {};
-  instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  instanceCreateInfo.pApplicationInfo = &appInfo;
+  std::vector<const char*> instanceExtensions = { VK_KHR_SURFACE_EXTENSION_NAME };
 
-  uint32_t layerCount = 0;
+  /***
+    // Enable surface extensions depending on os
+  #if defined(_WIN32)
+    instanceExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+  #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    instanceExtensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+  #elif defined(_DIRECT2DISPLAY)
+    instanceExtensions.push_back(VK_KHR_DISPLAY_EXTENSION_NAME);
+  #elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
+    instanceExtensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+  #elif defined(VK_USE_PLATFORM_XCB_KHR)
+    instanceExtensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+  #elif defined(VK_USE_PLATFORM_IOS_MVK)
+    instanceExtensions.push_back(VK_MVK_IOS_SURFACE_EXTENSION_NAME);
+  #elif defined(VK_USE_PLATFORM_MACOS_MVK)
+    instanceExtensions.push_back(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
+  #endif
+  ****/
 
-  // TODO debug only?
-  const char* validationLayers[] = { "VK_LAYER_LUNARG_standard_validation" };
-  layerCount = 1;
+  enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
-  std::vector<const char*> extensionNames;
-  for (size_t i = 0; i < requiredExtensionCount; ++i) {
-    extensionNames.push_back(requiredExtensionNames[i]);
+  if (enabledInstanceExtensions.size() > 0) {
+    for (auto enabledExtension : enabledInstanceExtensions) {
+      instanceExtensions.push_back(enabledExtension);
+    }
   }
 
-#if DEBUG
-  // Check if layers are available
-  uint32_t instanceLayerCount;
-  vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr);
-  std::vector<VkLayerProperties> instanceLayers(instanceLayerCount);
-  vkEnumerateInstanceLayerProperties(&instanceLayerCount, instanceLayers.data());
-
-  bool layersAvailable = true;
-  for (auto layerName : validationLayers) {
-    bool layerAvailable = false;
-    for (auto instanceLayer : instanceLayers) {
-      if (strcmp(instanceLayer.layerName, layerName) == 0) {
-        layerAvailable = true;
+  VkInstanceCreateInfo instanceCreateInfo = {};
+  instanceCreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  instanceCreateInfo.pNext = NULL;
+  instanceCreateInfo.pApplicationInfo = &appInfo;
+  if (instanceExtensions.size() > 0) {
+    if (g_validation) {
+      instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+    instanceCreateInfo.enabledExtensionCount = (uint32_t)instanceExtensions.size();
+    instanceCreateInfo.ppEnabledExtensionNames = instanceExtensions.data();
+  }
+  if (g_validation) {
+    // The VK_LAYER_KHRONOS_validation contains all current validation functionality.
+    // Note that on Android this layer requires at least NDK r20
+    const char* validationLayerName = "VK_LAYER_KHRONOS_validation";
+    // Check if this layer is available at instance level
+    uint32_t instanceLayerCount;
+    vkEnumerateInstanceLayerProperties(&instanceLayerCount, nullptr);
+    std::vector<VkLayerProperties> instanceLayerProperties(instanceLayerCount);
+    vkEnumerateInstanceLayerProperties(&instanceLayerCount, instanceLayerProperties.data());
+    bool validationLayerPresent = false;
+    for (VkLayerProperties layer : instanceLayerProperties) {
+      if (strcmp(layer.layerName, validationLayerName) == 0) {
+        validationLayerPresent = true;
         break;
       }
     }
-    if (!layerAvailable) {
-      layersAvailable = false;
-      break;
+    if (validationLayerPresent) {
+      instanceCreateInfo.ppEnabledLayerNames = &validationLayerName;
+      instanceCreateInfo.enabledLayerCount = 1;
+    } else {
+      std::cerr << "Validation layer VK_LAYER_KHRONOS_validation not present, validation is disabled";
     }
   }
 
-  if (layersAvailable) {
-    instanceCreateInfo.ppEnabledLayerNames = validationLayers;
-    instanceCreateInfo.enabledLayerCount = layerCount;
-
-    extensionNames.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-  }
-#endif
-  instanceCreateInfo.enabledExtensionCount = static_cast<uint32_t>(extensionNames.size());
-  instanceCreateInfo.ppEnabledExtensionNames = extensionNames.data();
-
   VkInstance instance = nullptr;
   VK_CHECK_RESULT(vkCreateInstance(&instanceCreateInfo, nullptr, &instance));
-
-#if DEBUG
-  if (instance && layersAvailable) {
-    VkDebugReportCallbackCreateInfoEXT debugReportCreateInfo = {};
-    debugReportCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-    debugReportCreateInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
-    debugReportCreateInfo.pfnCallback = (PFN_vkDebugReportCallbackEXT)debugMessageCallback;
-
-    // We have to explicitly load this function.
-    PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT =
-      reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(
-        vkGetInstanceProcAddr(sInstance, "vkCreateDebugReportCallbackEXT"));
-    assert(vkCreateDebugReportCallbackEXT);
-    VK_CHECK_RESULT(vkCreateDebugReportCallbackEXT(instance, &debugReportCreateInfo, nullptr, &debugReportCallback));
-  }
-#endif
 
   return instance;
 }
@@ -236,15 +238,9 @@ GraphicsVk::cleanup()
   }
   delete sVulkanDevice;
 
-#if DEBUG
-  if (debugReportCallback) {
-    PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback =
-      reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(
-        vkGetInstanceProcAddr(sInstance, "vkDestroyDebugReportCallbackEXT"));
-    assert(vkDestroyDebugReportCallback);
-    vkDestroyDebugReportCallback(sInstance, debugReportCallback, nullptr);
+  if (g_validation) {
+    vks::debug::freeDebugCallback(sInstance);
   }
-#endif
 
   // THE END
   vkDestroyInstance(sInstance, nullptr);
@@ -265,7 +261,7 @@ GraphicsVk::createNormalsRenderer()
 }
 
 RenderTarget*
-GraphicsVk::createWindowRenderTarget()
+GraphicsVk::createWindowRenderTarget(void* nativeWindow)
 {
   return nullptr;
 }

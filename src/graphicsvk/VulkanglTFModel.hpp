@@ -332,6 +332,8 @@ namespace vkglTF
 	struct Primitive {
 		uint32_t firstIndex;
 		uint32_t indexCount;
+		uint32_t firstVertex;
+		uint32_t vertexCount;
 		Material &material;
 
 		struct Dimensions {
@@ -504,6 +506,57 @@ namespace vkglTF
 	};
 
 	/*
+		glTF default vertex layout with easy Vulkan mapping functions
+	*/
+	enum class VertexComponent { Position, Normal, UV, Color, Joint0, Weight0 };
+
+	struct Vertex {
+		glm::vec3 pos;
+		glm::vec3 normal;
+		glm::vec2 uv;
+		glm::vec4 color;
+		glm::vec4 joint0;
+		glm::vec4 weight0;
+		static VkVertexInputBindingDescription inputBindingDescription(uint32_t binding) {
+			return VkVertexInputBindingDescription({ binding, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX });
+		}
+		static VkVertexInputAttributeDescription inputAttributeDescription(uint32_t binding, uint32_t location, VertexComponent component) {
+			switch (component) {
+				case VertexComponent::Position: 
+					return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos) });
+				case VertexComponent::Normal:
+					return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, normal) });
+				case VertexComponent::UV:
+					return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32_SFLOAT, offsetof(Vertex, uv) });
+				case VertexComponent::Color:
+					return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, color) });
+				case VertexComponent::Joint0:
+					return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, joint0) });
+				case VertexComponent::Weight0:
+					return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(Vertex, weight0) });
+				default:
+					return VkVertexInputAttributeDescription({});
+			}
+		}
+		static std::vector<VkVertexInputAttributeDescription> inputAttributeDescriptions(uint32_t binding, const std::vector<VertexComponent> components) {
+			std::vector<VkVertexInputAttributeDescription> result;
+			uint32_t location = 0;
+			for (VertexComponent component : components) {
+				result.push_back(Vertex::inputAttributeDescription(binding, location, component));
+				location++;
+			}
+			return result;
+		}
+	};
+
+	enum FileLoadingFlags {
+		None = 0x00000000,
+		PreTransformVertices = 0x00000001,
+		PreMultiplyVertexColors = 0x00000002,
+		FlipY = 0x00000004
+	};
+
+	/*
 		glTF model loading and rendering class
 	*/
 	struct Model {
@@ -511,14 +564,6 @@ namespace vkglTF
 		vks::VulkanDevice *device;
 		VkDescriptorPool descriptorPool;
 		VkDescriptorSetLayout descriptorSetLayout;
-
-		struct Vertex {
-			glm::vec3 pos;
-			glm::vec3 normal;
-			glm::vec2 uv;
-			glm::vec4 joint0;
-			glm::vec4 weight0;
-		};
 
 		struct Vertices {
 			VkBuffer buffer;
@@ -619,6 +664,7 @@ namespace vkglTF
 					uint32_t indexStart = static_cast<uint32_t>(indexBuffer.size());
 					uint32_t vertexStart = static_cast<uint32_t>(vertexBuffer.size());
 					uint32_t indexCount = 0;
+					uint32_t vertexCount = 0;
 					glm::vec3 posMin{};
 					glm::vec3 posMax{};
 					bool hasSkin = false;
@@ -627,6 +673,8 @@ namespace vkglTF
 						const float *bufferPos = nullptr;
 						const float *bufferNormals = nullptr;
 						const float *bufferTexCoords = nullptr;
+						const float* bufferColors = nullptr;
+						uint32_t numColorComponents;
 						const uint16_t *bufferJoints = nullptr;
 						const float *bufferWeights = nullptr;
 
@@ -650,6 +698,13 @@ namespace vkglTF
 							const tinygltf::BufferView &uvView = model.bufferViews[uvAccessor.bufferView];
 							bufferTexCoords = reinterpret_cast<const float *>(&(model.buffers[uvView.buffer].data[uvAccessor.byteOffset + uvView.byteOffset]));
 						}
+						if (primitive.attributes.find("COLOR_0") != primitive.attributes.end()) {
+							const tinygltf::Accessor& colorAccessor = model.accessors[primitive.attributes.find("COLOR_0")->second];
+							const tinygltf::BufferView& colorView = model.bufferViews[colorAccessor.bufferView];
+							// Color buffer are either of type vec3 or vec4
+							numColorComponents = colorAccessor.type == TINYGLTF_PARAMETER_TYPE_FLOAT_VEC3 ? 3 : 4;
+							bufferColors = reinterpret_cast<const float*>(&(model.buffers[colorView.buffer].data[colorAccessor.byteOffset + colorView.byteOffset]));
+						}
 
 						// Skinning
 						// Joints
@@ -667,12 +722,24 @@ namespace vkglTF
 
 						hasSkin = (bufferJoints && bufferWeights);
 
+						vertexCount = static_cast<uint32_t>(posAccessor.count);
+
 						for (size_t v = 0; v < posAccessor.count; v++) {
 							Vertex vert{};
 							vert.pos = glm::vec4(glm::make_vec3(&bufferPos[v * 3]), 1.0f);
 							vert.normal = glm::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
 							vert.uv = bufferTexCoords ? glm::make_vec2(&bufferTexCoords[v * 2]) : glm::vec3(0.0f);
-							
+							if (bufferColors) {
+								switch (numColorComponents) {
+									case 3: 
+										vert.color = glm::vec4(glm::make_vec3(&bufferColors[v * 3]), 1.0f);
+									case 4:
+										vert.color = glm::make_vec4(&bufferColors[v * 4]);
+								}
+							}
+							else {
+								vert.color = glm::vec4(1.0f);
+							}
 							vert.joint0 = hasSkin ? glm::vec4(glm::make_vec4(&bufferJoints[v * 4])) : glm::vec4(0.0f);
 							vert.weight0 = hasSkin ? glm::make_vec4(&bufferWeights[v * 4]) : glm::vec4(0.0f);
 							vertexBuffer.push_back(vert);
@@ -717,6 +784,8 @@ namespace vkglTF
 						}
 					}
 					Primitive *newPrimitive = new Primitive(indexStart, indexCount, materials[primitive.material]);
+					newPrimitive->firstVertex = vertexStart;
+					newPrimitive->vertexCount = vertexCount;
 					newPrimitive->setDimensions(posMin, posMax);
 					newMesh->primitives.push_back(newPrimitive);
 				}
@@ -929,7 +998,7 @@ namespace vkglTF
 			}
 		}
 
-		void loadFromFile(std::string filename, vks::VulkanDevice *device, VkQueue transferQueue, float scale = 1.0f)
+		void loadFromFile(std::string filename, vks::VulkanDevice *device, VkQueue transferQueue, uint32_t fileLoadingFlags = vkglTF::FileLoadingFlags::None, float scale = 1.0f)
 		{
 			tinygltf::Model gltfModel;
 			tinygltf::TinyGLTF gltfContext;
@@ -982,6 +1051,35 @@ namespace vkglTF
 				// TODO: throw
 				std::cerr << "Could not load gltf file: " << error << std::endl;
 				return;
+			}
+
+			// Pre-Calculations for requested features
+			if ((fileLoadingFlags & FileLoadingFlags::PreTransformVertices) || (fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors) || (fileLoadingFlags & FileLoadingFlags::FlipY)) {
+				const bool preTransform = fileLoadingFlags & FileLoadingFlags::PreTransformVertices;
+				const bool preMultiplyColor = fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors;
+				const bool flipY = fileLoadingFlags & FileLoadingFlags::FlipY;
+				for (Node* node : linearNodes) {
+					if (node->mesh) {
+						const glm::mat4 localMatrix = node->getMatrix();
+						for (Primitive* primitive : node->mesh->primitives) {
+							for (uint32_t i = 0; i < primitive->vertexCount; i++) {
+								Vertex& vertex = vertexBuffer[primitive->firstVertex + i];
+								// Pre-transform vertex positions by node-hierarchy
+								if (preTransform) {
+									vertex.pos = glm::vec3(localMatrix * glm::vec4(vertex.pos, 1.0f));
+								}
+								// Flip Y-Axis of vertex positions
+								if (flipY) {
+									vertex.pos.y *= -1.0f;
+								}
+								// Pre-Multiply vertex colors with material base color
+								if (preMultiplyColor) {
+									vertex.color = primitive->material.baseColorFactor * vertex.color;
+								}
+							}
+						}
+					}
+				}
 			}
 
 			for (auto extension : gltfModel.extensionsUsed) {

@@ -21,7 +21,7 @@ public:
   SceneRenderer* createDefaultRenderer() override;
   SceneRenderer* createNormalsRenderer() override;
 
-  RenderTarget* createWindowRenderTarget() override;
+  RenderTarget* createWindowRenderTarget(void* nativeWindow) override;
   RenderTarget* createImageRenderTarget(int width, int height, PixelFormat format = PixelFormat::RGBA8U) override;
 
   Mesh* createMesh(uint32_t i_nVertices,

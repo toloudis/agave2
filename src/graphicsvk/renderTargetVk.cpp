@@ -87,8 +87,7 @@ void* RenderTargetVk::getPixels(/* optional rectangle ? */)
 */
   const char* imagedata;
   {
-    // Create the linear tiled destination image to copy to and to read the
-    // memory from
+    // Create the linear tiled destination image to copy to and to read the memory from
     VkImageCreateInfo imgCreateInfo(vks::initializers::imageCreateInfo());
     imgCreateInfo.imageType = VK_IMAGE_TYPE_2D;
     imgCreateInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -116,14 +115,9 @@ void* RenderTargetVk::getPixels(/* optional rectangle ? */)
     VK_CHECK_RESULT(vkAllocateMemory(device, &memAllocInfo, nullptr, &dstImageMemory));
     VK_CHECK_RESULT(vkBindImageMemory(device, dstImage, dstImageMemory, 0));
 
-    // Do the actual blit from the offscreen image to our host visible
-    // destination image
-    VkCommandBufferAllocateInfo cmdBufAllocateInfo =
-      vks::initializers::commandBufferAllocateInfo(m_device->commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
-    VkCommandBuffer copyCmd;
-    VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, &copyCmd));
-    VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
-    VK_CHECK_RESULT(vkBeginCommandBuffer(copyCmd, &cmdBufInfo));
+    // Do the actual blit from the offscreen image to our host visible destination image
+    VkCommandBuffer copyCmd =
+      m_device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, m_device->commandPool, true);
 
     // Transition destination image to transfer destination layout
     vks::tools::insertImageMemoryBarrier(copyCmd,
@@ -136,9 +130,7 @@ void* RenderTargetVk::getPixels(/* optional rectangle ? */)
                                          VK_PIPELINE_STAGE_TRANSFER_BIT,
                                          VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 });
 
-    // colorAttachment.image is already in
-    // VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, and does not need to be
-    // transitioned
+    // colorAttachment.image is already in VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, and does not need to be transitioned
 
     VkImageCopy imageCopyRegion{};
     imageCopyRegion.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -151,15 +143,14 @@ void* RenderTargetVk::getPixels(/* optional rectangle ? */)
 
     vkCmdCopyImage(copyCmd,
                    m_vulkanFramebuffer->attachments[0].image,
-                   // colorAttachment.image,
                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                    dstImage,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    1,
                    &imageCopyRegion);
 
-    // Transition destination image to general layout, which is the required
-    // layout for mapping the image memory later on
+    // Transition destination image to general layout, which is the required layout for mapping the image memory later
+    // on
     vks::tools::insertImageMemoryBarrier(copyCmd,
                                          dstImage,
                                          VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -171,6 +162,8 @@ void* RenderTargetVk::getPixels(/* optional rectangle ? */)
                                          VkImageSubresourceRange{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 });
 
     // VK_CHECK_RESULT(vkEndCommandBuffer(copyCmd));
+
+    // submitWork(copyCmd, queue);
     m_device->flushCommandBuffer(copyCmd, m_queue, false);
 
     // Get layout of the image (including row pitch)
