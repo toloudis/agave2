@@ -3,7 +3,6 @@ set_target_properties(agave2app PROPERTIES OUTPUT_NAME "agave")
 target_include_directories(agave2app PUBLIC
     "${CMAKE_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}"
-    ${Vulkan_INCLUDE_DIRS}
 )
 
 target_sources(agave2app PRIVATE

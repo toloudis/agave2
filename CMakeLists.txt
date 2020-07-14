@@ -14,8 +14,6 @@ set(CMAKE_CXX_STANDARD 14)
 # Find includes in corresponding build directories
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-find_package(Vulkan REQUIRED)
-
 include_directories(src)
 add_subdirectory(src)
 
