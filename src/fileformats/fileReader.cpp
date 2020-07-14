@@ -6,12 +6,17 @@
 
 #include "spdlog/spdlog.h"
 
-#include <boost/filesystem.hpp>
-
 #include <chrono>
 #include <map>
 
 std::map<std::string, std::shared_ptr<ImageXYZC>> FileReader::sPreloadedImageCache;
+
+std::string
+extension(const std::string& filepath)
+{
+  size_t pos = filepath.rfind('.');
+  return pos == std::string::npos ? "" : std::string(filepath.c_str() + pos);
+}
 
 FileReader::FileReader() {}
 
@@ -32,10 +37,7 @@ FileReader::loadFromFile(const std::string& filepath,
 
   std::shared_ptr<ImageXYZC> image;
 
-  boost::filesystem::path fpath(filepath);
-
-  boost::filesystem::path ext = fpath.extension();
-  std::string extstr = ext.string();
+  std::string extstr = extension(filepath);
   for (std::string::size_type i = 0; i < extstr.length(); ++i) {
     extstr[i] = std::tolower(extstr[i]);
   }

@@ -9,9 +9,9 @@
 
 #include <libCZI/Src/libCZI/libCZI.h>
 
-#include <boost/filesystem.hpp>
-
 #include <chrono>
+#include <codecvt>
+#include <locale>
 #include <map>
 #include <set>
 
@@ -26,8 +26,8 @@ class ScopedCziReader
 public:
   ScopedCziReader(const std::string& filepath)
   {
-    boost::filesystem::path fpath(filepath);
-    const std::wstring widestr = fpath.wstring();
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    std::wstring widestr = converter.from_bytes(filepath);
 
     std::shared_ptr<libCZI::IStream> stream = libCZI::CreateStreamFromFile(widestr.c_str());
     m_reader = libCZI::CreateCZIReader();
