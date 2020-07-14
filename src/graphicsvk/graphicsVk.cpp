@@ -265,7 +265,7 @@ GraphicsVk::createNormalsRenderer()
 }
 
 RenderTarget*
-GraphicsVk::createWindowRenderTarget()
+GraphicsVk::createWindowRenderTarget(void* nativeWindow)
 {
   return nullptr;
 }

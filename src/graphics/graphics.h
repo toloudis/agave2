@@ -40,7 +40,7 @@ public:
   virtual SceneRenderer* createNormalsRenderer() = 0;
   // virtual ScenePickRenderer* r = graphics->CreatePickRenderer(); // separate interface?
 
-  virtual RenderTarget* createWindowRenderTarget() = 0;
+  virtual RenderTarget* createWindowRenderTarget(void* nativeWindow) = 0;
   virtual RenderTarget* createImageRenderTarget(int width, int height, PixelFormat format = PixelFormat::RGBA8U) = 0;
 
   virtual Mesh* createMesh(uint32_t i_nVertices,
